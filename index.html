@@ -528,9 +528,12 @@ function digCell(r,c){
     }
   }
 }
-/* Pointer handling: tap toggles a survey X, double-tap digs,
-   dragging paints survey X's across every cell it touches. */
-var tapTimer=null, lastTapR=-1, lastTapC=-1, lastTapT=0, pDown=null;
+/* Pointer handling: tap toggles a survey X instantly, double-tap digs,
+   dragging paints survey X's across every cell it touches.
+   The X appears the moment the tap lands (no waiting to rule out a
+   double-tap): if a second tap follows on the same cell, the first tap's
+   toggle is reverted and the cell is dug instead. */
+var lastTap={r:-1,c:-1,t:0,prev:null}, pDown=null;
 function cellFromPoint(x,y){
   var el=document.elementFromPoint(x,y);
   if(!el||!el.closest) return null;
@@ -561,15 +564,17 @@ function onBoardUp(){
   if(!pDown) return;
   var d=pDown; pDown=null;
   if(d.moved){ if(d.painted) sfx('click'); return; }
+  if(won||!puzzle) return;
   var now=Date.now();
-  if(d.r===lastTapR && d.c===lastTapC && now-lastTapT<320){
-    if(tapTimer){clearTimeout(tapTimer);tapTimer=null;}
-    lastTapR=-1; lastTapC=-1; lastTapT=0;
+  if(d.r===lastTap.r && d.c===lastTap.c && now-lastTap.t<320 && lastTap.prev!==null){
+    state[d.r][d.c]=lastTap.prev; drawCell(d.r,d.c);
+    lastTap={r:-1,c:-1,t:0,prev:null};
     digCell(d.r,d.c);
   }else{
-    lastTapR=d.r; lastTapC=d.c; lastTapT=now;
-    if(tapTimer) clearTimeout(tapTimer);
-    tapTimer=setTimeout(function(){tapTimer=null; surveyTap(d.r,d.c);},320);
+    var s=state[d.r][d.c];
+    if(s==='nugget'||s==='dug'){ lastTap={r:-1,c:-1,t:0,prev:null}; return; }
+    lastTap={r:d.r,c:d.c,t:now,prev:s};
+    surveyTap(d.r,d.c);
   }
 }
 function onBoardCancel(){ pDown=null; }
@@ -633,7 +638,7 @@ function useHint(){
   placeNugget(cell[0],cell[1],true);
 }
 function loadLevel(idx){
-  levelIdx=idx; won=false;
+  levelIdx=idx; won=false; lastTap={r:-1,c:-1,t:0,prev:null};
   $('winOverlay').classList.remove('show');
   $('failOverlay').classList.remove('show');
   $('levelsOverlay').classList.remove('show');
@@ -658,7 +663,7 @@ function loadLevel(idx){
 }
 function resetBoard(){
   if(!puzzle) return;
-  won=false; hearts=3; hintsLeft=3; found=0; streak=0;
+  won=false; lastTap={r:-1,c:-1,t:0,prev:null}; hearts=3; hintsLeft=3; found=0; streak=0;
   renderHearts(); hintCount.textContent=hintsLeft; hintBtn.disabled=false;
   $('failOverlay').classList.remove('show');
   $('winOverlay').classList.remove('show');
