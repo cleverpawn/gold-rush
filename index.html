@@ -53,19 +53,19 @@
   #board{
     display:grid; gap:3px; background:#0d0906; padding:8px; border-radius:14px;
     border:2px solid #4a3319; box-shadow:0 8px 24px rgba(0,0,0,.55), inset 0 0 40px rgba(0,0,0,.5);
-    width:100%; aspect-ratio:1/1;
+    width:100%; aspect-ratio:1/1; touch-action:none;
   }
   .cell{
     position:relative; border:none; border-radius:5px; cursor:pointer; padding:0;
     display:flex; align-items:center; justify-content:center;
+    min-width:0; min-height:0; overflow:hidden;
     box-shadow:inset 0 2px 3px rgba(255,255,255,.25), inset 0 -3px 5px rgba(0,0,0,.28);
     transition:transform .06s;
   }
   .cell:active{transform:scale(.93);}
   .cell .mark{width:82%; height:82%; display:flex; align-items:center; justify-content:center; pointer-events:none;}
-  .cell .mark svg{width:100%; height:100%;}
+  .cell .mark svg{width:100%; height:100%; display:block;}
   .cell.dug{cursor:default;}
-  .cell .note-mark{position:absolute; right:3px; bottom:2px; font-size:clamp(11px,3.4vw,20px); line-height:1; opacity:.9; pointer-events:none;}
   .cell.pop .mark{animation:pop .45s cubic-bezier(.2,1.6,.4,1);}
   .cell.shake{animation:shake .4s;}
   .cell .spark{position:absolute; inset:0; pointer-events:none;}
@@ -109,12 +109,17 @@
   .ctl:active{transform:scale(.96);}
   .ctl.active{background:linear-gradient(180deg,#f7d774,#dfa92e); color:#3a2408; border-color:#8a5a10;
     box-shadow:0 4px 14px rgba(245,197,66,.35);}
+  #gestureHint{flex:1; align-self:center; text-align:center; font-size:13px; opacity:.72; line-height:1.45;}
   #levelNav{display:flex; align-items:center; justify-content:space-between; gap:8px;}
-  #dots{display:flex; gap:6px; flex-wrap:wrap; justify-content:center;}
-  .dot{width:16px; height:16px; border-radius:50%; background:#3a2a16; border:1px solid #5a4020; cursor:pointer; padding:0;}
-  .dot.done{background:var(--gold); border-color:var(--gold-deep);}
-  .dot.current{outline:2px solid var(--gold); outline-offset:2px; background:#6b4a10;}
-  .dot.locked{opacity:.35; cursor:default;}
+  #jumpBtn{flex:1;}
+  #levelGrid{display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin:14px 0; max-height:42vh; overflow-y:auto; padding:2px;}
+  .lvl-btn{background:#33220f; color:var(--parchment); border:1px solid #5a4020; border-radius:10px; padding:10px 4px; font-size:14px; font-weight:700; cursor:pointer;}
+  .lvl-btn:active{transform:scale(.94);}
+  .lvl-btn.done{background:#6b4a10; border-color:var(--gold); color:var(--gold);}
+  .lvl-btn.current{outline:2px solid var(--gold); outline-offset:1px;}
+  .lvl-btn:disabled{opacity:.28; cursor:default;}
+  #levelPager{display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:6px;}
+  #pgLabel{font-size:14px; font-weight:700; color:var(--gold); min-width:150px; text-align:center;}
   .nav-btn{background:none; border:none; color:var(--gold); font-size:22px; cursor:pointer; padding:4px 10px;}
   .nav-btn:disabled{opacity:.25;}
   .overlay{
@@ -185,14 +190,13 @@
   </div>
 
   <div id="controls">
-    <button class="ctl active" id="digBtn">⛏️ Dig</button>
-    <button class="ctl" id="noteBtn">📝 Survey</button>
-    <button class="ctl" id="restartBtn" style="flex:0 0 64px">↺</button>
+    <span id="gestureHint">Tap: survey &nbsp;·&nbsp; Double-tap: dig &nbsp;·&nbsp; Drag: survey a line</span>
+    <button class="ctl" id="restartBtn" style="flex:0 0 64px" title="Restart claim">↺</button>
   </div>
 
   <div id="levelNav">
     <button class="nav-btn" id="prevBtn">◀</button>
-    <div id="dots"></div>
+    <button class="icon-btn" id="jumpBtn" title="Choose a claim">🗺️ Claims</button>
     <button class="nav-btn" id="nextBtn">▶</button>
   </div>
   <div class="footer-note">One nugget per claim · one per row · one per column · nuggets never touch</div>
@@ -208,9 +212,23 @@
       <li>⛏️ <b>One per row &amp; column.</b> Each row and each column holds exactly one nugget too.</li>
       <li>🚫 <b>Nuggets never touch</b> — not side-by-side, not even corner-to-corner!</li>
       <li>❤️ <b>Three hearts.</b> Digging an empty shaft costs one. Lose all three and the mine plays out — but the nuggets you've found stay found.</li>
-      <li>📝 <b>Survey mode</b> marks maybes with a little pickaxe. <b>💡 Hints</b> ask Sadie to point at a real nugget (3 per claim).</li>
+      <li>👆 <b>Tap</b> a cell to mark a survey X. <b>Double-tap</b> to dig for gold. <b>Drag</b> across cells to survey a whole line.</li>
+      <li>💡 <b>Hints</b> ask Sadie to point at a real nugget (3 per claim).</li>
     </ol>
     <button class="big-btn" id="helpClose">Start diggin'!</button>
+  </div>
+</div>
+
+<div class="overlay" id="levelsOverlay">
+  <div class="card">
+    <h2>Choose your claim</h2>
+    <div id="levelGrid"></div>
+    <div id="levelPager">
+      <button class="ghost-btn" id="pgPrev" style="margin:0">◀</button>
+      <span id="pgLabel"></span>
+      <button class="ghost-btn" id="pgNext" style="margin:0">▶</button>
+    </div>
+    <button class="big-btn" id="levelsClose">Back to diggin'</button>
   </div>
 </div>
 
@@ -336,26 +354,25 @@ function genPuzzle(n,seed){
 }
 </script>
 <script>
-var PUZZLES=[{"n":6,"regions":["200000","220101","224111","424133","444435","444435"],"solution":[1,3,0,4,2,5]},{"n":6,"regions":["022331","222331","222333","243333","444533","555533"],"solution":[0,5,2,4,1,3]},{"n":6,"regions":["110033","112333","142333","443335","444335","445555"],"solution":[3,0,2,4,1,5]},{"n":7,"regions":["0111333","0221133","0223133","4243333","4244433","4445533","4445556"],"solution":[0,3,1,5,2,4,6]},{"n":7,"regions":["0000221","3002221","3344225","3344455","4445555","4655555","6655555"],"solution":[3,6,4,0,2,5,1]},{"n":7,"regions":["1111000","1111004","1113024","1153344","1155544","5555544","6555554"],"solution":[4,1,5,3,6,2,0]},{"n":8,"regions":["11220000","41122000","44423333","44443333","44433333","44433555","44433766","44777776"],"solution":[4,1,3,6,0,5,7,2]},{"n":8,"regions":["33300221","33330021","33330222","33333344","33335444","33365554","66666666","77666666"],"solution":[3,7,5,1,6,4,2,0]},{"n":9,"regions":["000000122","440202122","440222222","433422222","444422222","445555662","444557666","555557786","555557786"],"solution":[1,6,4,2,0,3,8,5,7]},{"n":9,"regions":["001111111","221111111","211144111","223444111","224444444","244444566","444444586","444447786","444488888"],"solution":[1,3,0,2,4,6,8,5,7]},{"n":10,"regions":["2031145555","2331345555","2333345555","2333444555","3366444455","3666666655","6666666655","6666667855","6666677888","6666679988"],"solution":[1,3,0,2,5,8,4,6,9,7]},{"n":10,"regions":["4444100000","4444110000","4444000302","4444443333","4444444443","6644445444","6664445444","7666444444","9688444444","9998844444"],"solution":[8,5,9,7,4,6,2,0,3,1]}];
+var LEVELS=[[6,["200000","220101","224111","424133","444435","444435"],[1,3,0,4,2,5],"Pappy's Porch"],[6,["022331","222331","222333","243333","444533","555533"],[0,5,2,4,1,3],"Dry Creek"],[6,["110033","112333","142333","443335","444335","445555"],[3,0,2,4,1,5],"Rattlesnake Gulch"],[7,["0111333","0221133","0223133","4243333","4244433","4445533","4445556"],[0,3,1,5,2,4,6],"Coyote Flats"],[7,["0000221","3002221","3344225","3344455","4445555","4655555","6655555"],[3,6,4,0,2,5,1],"Whiskey River"],[7,["1111000","1111004","1113024","1153344","1155544","5555544","6555554"],[4,1,5,3,6,2,0],"Boot Hill"],[8,["11220000","41122000","44423333","44443333","44433333","44433555","44433766","44777776"],[4,1,3,6,0,5,7,2],"Dead Man's Canyon"],[8,["33300221","33330021","33330222","33333344","33335444","33365554","66666666","77666666"],[3,7,5,1,6,4,2,0],"Sutter's Bend"],[9,["000000122","440202122","440222222","433422222","444422222","445555662","444557666","555557786","555557786"],[1,6,4,2,0,3,8,5,7],"The Motherlode"],[9,["001111111","221111111","211144111","223444111","224444444","244444566","444444586","444447786","444488888"],[1,3,0,2,4,6,8,5,7],"El Dorado"],[10,["2031145555","2331345555","2333345555","2333444555","3366444455","3666666655","6666666655","6666667855","6666677888","6666679988"],[1,3,0,2,5,8,4,6,9,7],"King Solomon's Mine"],[10,["4444100000","4444110000","4444000302","4444443333","4444444443","6644445444","6664445444","7666444444","9688444444","9998844444"],[8,5,9,7,4,6,2,0,3,1],"The Last Claim"]];
 </script>
 <script>
 (function(){
 'use strict';
 /* ---------------- Levels ---------------- */
-var LEVELS=[
-  {size:6,name:"Pappy's Porch",seed:1103},
-  {size:6,name:"Dry Creek",seed:2207},
-  {size:6,name:"Rattlesnake Gulch",seed:3311},
-  {size:7,name:"Coyote Flats",seed:4409},
-  {size:7,name:"Whiskey River",seed:5519},
-  {size:7,name:"Boot Hill",seed:6623},
-  {size:8,name:"Dead Man's Canyon",seed:7717},
-  {size:8,name:"Sutter's Bend",seed:8821},
-  {size:9,name:"The Motherlode",seed:9919},
-  {size:9,name:"El Dorado",seed:10133},
-  {size:10,name:"King Solomon's Mine",seed:11261},
-  {size:10,name:"The Last Claim",seed:12347}
-];
+/* LEVELS is injected by build.py: an array of [size, seed, name] (3000 claims).
+   Puzzles are generated deterministically at load time from these verified seeds. */
+var puzzleCache={};
+function levelSize(i){return LEVELS[i][0];}
+function levelSeed(i){return LEVELS[i][1];}
+function levelName(i){return LEVELS[i][2];}
+function getPuzzle(idx){
+  if(puzzleCache[idx]) return puzzleCache[idx];
+  var p=null;
+  for(var t=0;t<10 && !p;t++){ p=genPuzzle(levelSize(idx),(levelSeed(idx)+t*1000003)|0); }
+  if(p) puzzleCache[idx]=p;
+  return p;
+}
 var REGION_COLORS=['#d9a05b','#8fb573','#6fa287','#c97f5e','#a583c2','#6d93b8','#d78ba0','#a9bd6d','#9c8b6f','#74aca3'];
 
 /* ---------------- Sadie's lines ---------------- */
@@ -368,13 +385,13 @@ var QUIPS={
   streak3:["Three in a row! You're a regular gold magnet, sugar!","Hot diggity — you're on a streak! The mountain's smilin' on ya!"],
   streak5:["Five straight strikes! Pappy'd be dancin' a jig right now!","Five in a row?! Somebody fetch the assay office!"],
   intro:["This here's {name}. {n} claims, {n} nuggets hidin'. Happy huntin'!","Pappy staked {name} back in '49. One nugget per claim — find 'em all, sugar.","Welcome to {name}. Remember: nuggets never touch, not even at the corners!"],
-  idle:["One nugget per claim, one per row, one per column.","Nuggets never touch — not even corner-to-corner.","Stuck? Mark maybes with 📝 Survey, then dig when you're sure.","Each colored claim hides exactly ONE nugget.","💡 I can point at a real nugget if you ask nice. Three hints per claim."]
+  idle:["One nugget per claim, one per row, one per column.","Nuggets never touch — not even corner-to-corner.","Stuck? Tap cells to mark survey X's, double-tap when you're sure enough to dig.","Each colored claim hides exactly ONE nugget.","💡 I can point at a real nugget if you ask nice. Three hints per claim."]
 };
 function pick(a){return a[(Math.random()*a.length)|0];}
 function fill(tpl,ctx){return tpl.replace(/\{(\w+)\}/g,function(_,k){return ctx[k];});}
 
 /* ---------------- State ---------------- */
-var levelIdx=0, puzzle=null, state=[], hearts=3, hintsLeft=3, mode='dig';
+var levelIdx=0, puzzle=null, state=[], hearts=3, hintsLeft=3;
 var found=0, streak=0, startTime=0, lastSay=0, idleTimer=null, won=false;
 var progress=0, muted=false;
 try{
@@ -437,12 +454,16 @@ function nuggetSVG(){
 function dugSVG(){
   return '<svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19" stroke="#241608" stroke-width="4" stroke-linecap="round" opacity=".55"/></svg>';
 }
+function xSVG(){
+  return '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="#f3e3c3" stroke-width="4.5" stroke-linecap="round" opacity=".6"/></svg>';
+}
 function renderHearts(){
   heartsEl.textContent='❤️'.repeat(hearts)+'🖤'.repeat(Math.max(0,3-hearts));
 }
 function buildBoard(){
   var n=puzzle.n;
-  boardEl.style.gridTemplateColumns='repeat('+n+',1fr)';
+  boardEl.style.gridTemplateColumns='repeat('+n+',minmax(0,1fr))';
+  boardEl.style.gridTemplateRows='repeat('+n+',minmax(0,1fr))';
   boardEl.innerHTML='';
   state=[];
   for(var r=0;r<n;r++){
@@ -455,9 +476,6 @@ function buildBoard(){
       b.setAttribute('data-r',r); b.setAttribute('data-c',c);
       b.setAttribute('aria-label','Claim cell row '+(r+1)+' column '+(c+1));
       b.innerHTML='<span class="mark"></span>';
-      (function(rr,cc,el){
-        el.addEventListener('click',function(){onCell(rr,cc,el);});
-      })(r,c,b);
       boardEl.appendChild(b);
     }
   }
@@ -466,30 +484,30 @@ function cellEl(r,c){return boardEl.children[r*puzzle.n+c];}
 function drawCell(r,c){
   var el=cellEl(r,c), s=state[r][c], mark=el.querySelector('.mark');
   el.classList.remove('pop','shake','dug');
-  var notes=el.querySelector('.note-mark'); if(notes) notes.remove();
   if(s==='nugget'){mark.innerHTML=nuggetSVG();}
   else if(s==='dug'){mark.innerHTML=dugSVG(); el.classList.add('dug');}
-  else if(s==='note'){mark.innerHTML='';var nm=document.createElement('span');nm.className='note-mark';nm.textContent='⛏️';el.appendChild(nm);}
+  else if(s==='note'){mark.innerHTML=xSVG();}
   else{mark.innerHTML='';}
 }
 
-/* ---------------- Game flow ---------------- */
-function setMode(m){
-  mode=m;
-  $('digBtn').classList.toggle('active',m==='dig');
-  $('noteBtn').classList.toggle('active',m==='note');
-  sfx('click');
-}
-function onCell(r,c,el){
+/* ---------------- Gestures: tap=survey, double-tap=dig, drag=survey a line ---------------- */
+function surveyTap(r,c){
   if(won||!puzzle) return;
   var s=state[r][c];
   if(s==='nugget'||s==='dug') return;
-  if(mode==='note'){
-    state[r][c]=(s==='note')?'empty':'note';
-    drawCell(r,c); sfx('click');
-    return;
-  }
-  /* dig mode */
+  state[r][c]=(s==='note')?'empty':'note';
+  drawCell(r,c); sfx('click');
+}
+function paintSurvey(r,c){
+  if(won||!puzzle) return;
+  if(state[r][c]!=='empty') return;
+  state[r][c]='note'; drawCell(r,c);
+}
+function digCell(r,c){
+  if(won||!puzzle) return;
+  var s=state[r][c];
+  if(s==='nugget'||s==='dug') return;
+  var el=cellEl(r,c);
   if(puzzle.solution[r]===c){
     placeNugget(r,c,false);
   }else{
@@ -508,6 +526,51 @@ function onCell(r,c,el){
     }
   }
 }
+/* Pointer handling: tap toggles a survey X, double-tap digs,
+   dragging paints survey X's across every cell it touches. */
+var tapTimer=null, lastTapR=-1, lastTapC=-1, lastTapT=0, pDown=null;
+function cellFromPoint(x,y){
+  var el=document.elementFromPoint(x,y);
+  if(!el||!el.closest) return null;
+  var cell=el.closest('.cell');
+  if(!cell||!boardEl.contains(cell)) return null;
+  return {r:+cell.getAttribute('data-r'), c:+cell.getAttribute('data-c')};
+}
+function onBoardDown(e){
+  if(won||!puzzle) return;
+  var cell=cellFromPoint(e.clientX,e.clientY);
+  if(!cell) return;
+  pDown={r:cell.r,c:cell.c,x:e.clientX,y:e.clientY,moved:false,painted:false};
+  try{boardEl.setPointerCapture(e.pointerId);}catch(err){}
+}
+function onBoardMove(e){
+  if(!pDown) return;
+  var dx=e.clientX-pDown.x, dy=e.clientY-pDown.y;
+  if(!pDown.moved && dx*dx+dy*dy>100) pDown.moved=true;
+  if(pDown.moved){
+    var cell=cellFromPoint(e.clientX,e.clientY);
+    if(cell && state[cell.r][cell.c]==='empty'){
+      paintSurvey(cell.r,cell.c);
+      pDown.painted=true;
+    }
+  }
+}
+function onBoardUp(){
+  if(!pDown) return;
+  var d=pDown; pDown=null;
+  if(d.moved){ if(d.painted) sfx('click'); return; }
+  var now=Date.now();
+  if(d.r===lastTapR && d.c===lastTapC && now-lastTapT<320){
+    if(tapTimer){clearTimeout(tapTimer);tapTimer=null;}
+    lastTapR=-1; lastTapC=-1; lastTapT=0;
+    digCell(d.r,d.c);
+  }else{
+    lastTapR=d.r; lastTapC=d.c; lastTapT=now;
+    if(tapTimer) clearTimeout(tapTimer);
+    tapTimer=setTimeout(function(){tapTimer=null; surveyTap(d.r,d.c);},320);
+  }
+}
+function onBoardCancel(){ pDown=null; }
 function placeNugget(r,c,viaHint){
   state[r][c]='nugget'; drawCell(r,c);
   var el=cellEl(r,c); el.classList.add('pop');
@@ -530,7 +593,7 @@ function onWin(){
   try{
     if(levelIdx+1>progress){progress=levelIdx+1;localStorage.setItem('grd_progress_v1',String(progress));}
   }catch(e){}
-  renderDots();
+  updateNav();
   setTimeout(function(){
     say(pick(QUIPS.win));
     $('winTitle').textContent=pick(["MOTHERLODE!","STRUCK IT RICH!","GOLD FEVER!"]);
@@ -571,25 +634,25 @@ function loadLevel(idx){
   levelIdx=idx; won=false;
   $('winOverlay').classList.remove('show');
   $('failOverlay').classList.remove('show');
-  var L=LEVELS[idx];
-  levelLabel.textContent='Claim '+(idx+1)+' of '+LEVELS.length+' · '+L.name;
+  $('levelsOverlay').classList.remove('show');
+  levelLabel.textContent='Claim '+(idx+1)+' of '+LEVELS.length+' · '+levelName(idx);
   $('loading').classList.add('show');
-  renderDots(); updateNav();
+  updateNav();
   setTimeout(function(){
-    puzzle=PUZZLES[idx];
-    hearts=3; hintsLeft=3; found=0; streak=0; setModeSilent('dig');
+    puzzle=getPuzzle(idx);
+    if(!puzzle){
+      $('loading').classList.remove('show');
+      say("This claim's bein' stubborn, partner — try the next one.");
+      return;
+    }
+    hearts=3; hintsLeft=3; found=0; streak=0;
     renderHearts(); hintCount.textContent=hintsLeft; hintBtn.disabled=false;
     buildBoard();
     startTime=Date.now();
     $('loading').classList.remove('show');
-    say(fill(pick(QUIPS.intro),{name:L.name,n:L.size}));
+    say(fill(pick(QUIPS.intro),{name:levelName(idx),n:levelSize(idx)}));
     startIdle();
-  },80);
-}
-function setModeSilent(m){
-  mode=m;
-  $('digBtn').classList.toggle('active',m==='dig');
-  $('noteBtn').classList.toggle('active',m==='note');
+  },120);
 }
 function resetBoard(){
   if(!puzzle) return;
@@ -602,28 +665,50 @@ function resetBoard(){
   say("Fresh shafts, same gold. Let's go, partner!");
 }
 
-/* ---------------- Level nav ---------------- */
-function renderDots(){
-  var d=$('dots'); d.innerHTML='';
-  for(var i=0;i<LEVELS.length;i++){
+/* ---------------- Level picker ---------------- */
+var LEVEL_PAGE=100, levelPage=0;
+function renderLevelGrid(){
+  var g=$('levelGrid'); g.innerHTML='';
+  var start=levelPage*LEVEL_PAGE;
+  for(var i=start;i<start+LEVEL_PAGE && i<LEVELS.length;i++){
     (function(i){
       var b=document.createElement('button');
-      b.className='dot'+(i<progress||(progress>=LEVELS.length)?' done':'')+(i===levelIdx?' current':'')+((i>progress)?' locked':'');
-      b.title=LEVELS[i].name;
-      b.setAttribute('aria-label','Claim '+(i+1)+': '+LEVELS[i].name);
-      if(i<=progress) b.addEventListener('click',function(){sfx('click');loadLevel(i);});
-      d.appendChild(b);
+      b.className='lvl-btn'+(i<progress?' done':'')+(i===levelIdx?' current':'');
+      b.textContent=i+1;
+      b.title='Claim '+(i+1)+': '+levelName(i);
+      b.disabled=i>progress;
+      if(i<=progress) b.addEventListener('click',function(){
+        sfx('click');
+        $('levelsOverlay').classList.remove('show');
+        loadLevel(i);
+      });
+      g.appendChild(b);
     })(i);
   }
+  var totalPages=Math.ceil(LEVELS.length/LEVEL_PAGE);
+  $('pgLabel').textContent='Claims '+(start+1)+'–'+Math.min(start+LEVEL_PAGE,LEVELS.length)+' of '+LEVELS.length;
+  $('pgPrev').disabled=levelPage<=0;
+  $('pgNext').disabled=levelPage>=totalPages-1;
+}
+function openLevels(){
+  levelPage=(levelIdx/LEVEL_PAGE)|0;
+  renderLevelGrid();
+  $('levelsOverlay').classList.add('show');
 }
 function updateNav(){
   $('prevBtn').disabled=levelIdx<=0;
-  $('nextBtn').disabled=levelIdx>=Math.min(progress,LEVELS.length-1);
+  $('nextBtn').disabled=levelIdx>=progress;
 }
 
 /* ---------------- Wire up ---------------- */
-$('digBtn').addEventListener('click',function(){setMode('dig');});
-$('noteBtn').addEventListener('click',function(){setMode('note');});
+boardEl.addEventListener('pointerdown',onBoardDown);
+boardEl.addEventListener('pointermove',onBoardMove);
+boardEl.addEventListener('pointerup',onBoardUp);
+boardEl.addEventListener('pointercancel',onBoardCancel);
+$('jumpBtn').addEventListener('click',function(){sfx('click');openLevels();});
+$('levelsClose').addEventListener('click',function(){sfx('click');$('levelsOverlay').classList.remove('show');});
+$('pgPrev').addEventListener('click',function(){if(levelPage>0){levelPage--;renderLevelGrid();sfx('click');}});
+$('pgNext').addEventListener('click',function(){if((levelPage+1)*LEVEL_PAGE<LEVELS.length){levelPage++;renderLevelGrid();sfx('click');}});
 $('restartBtn').addEventListener('click',function(){sfx('click');resetBoard();});
 hintBtn.addEventListener('click',useHint);
 $('helpBtn').addEventListener('click',function(){$('helpOverlay').classList.add('show');sfx('click');});
