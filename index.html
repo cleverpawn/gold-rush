@@ -360,17 +360,19 @@ var LEVELS=[[6,["200000","220101","224111","424133","444435","444435"],[1,3,0,4,
 (function(){
 'use strict';
 /* ---------------- Levels ---------------- */
-/* LEVELS is injected by build.py: an array of [size, seed, name] (3000 claims).
-   Puzzles are generated deterministically at load time from these verified seeds. */
+/* LEVELS is injected by build.py: an array of [size, regionRows, solution, name].
+   Every puzzle is pre-generated offline and verified (unique solution,
+   connected regions), so getPuzzle just materializes the embedded data —
+   no runtime generation, no seeds. */
 var puzzleCache={};
 function levelSize(i){return LEVELS[i][0];}
-function levelSeed(i){return LEVELS[i][1];}
-function levelName(i){return LEVELS[i][2];}
+function levelName(i){return LEVELS[i][3];}
 function getPuzzle(idx){
   if(puzzleCache[idx]) return puzzleCache[idx];
-  var p=null;
-  for(var t=0;t<10 && !p;t++){ p=genPuzzle(levelSize(idx),(levelSeed(idx)+t*1000003)|0); }
-  if(p) puzzleCache[idx]=p;
+  var spec=LEVELS[idx], n=spec[0], regions=[], r, c;
+  for(r=0;r<n;r++){ regions.push([]); for(c=0;c<n;c++) regions[r].push(parseInt(spec[1][r][c],36)); }
+  var p={n:n, regions:regions, solution:spec[2].slice()};
+  puzzleCache[idx]=p;
   return p;
 }
 var REGION_COLORS=['#d9a05b','#8fb573','#6fa287','#c97f5e','#a583c2','#6d93b8','#d78ba0','#a9bd6d','#9c8b6f','#74aca3','#e0c060','#5b8a8f'];
