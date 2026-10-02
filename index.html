@@ -209,7 +209,7 @@
   </div>
 
   <div id="controls">
-    <span id="gestureHint">Tap: survey &nbsp;·&nbsp; Double-tap: dig &nbsp;·&nbsp; Drag: survey a line</span>
+    <span id="gestureHint">Tap: survey &nbsp;·&nbsp; Double-tap: dig &nbsp;·&nbsp; Drag: paint or clear X's</span>
     <button class="ctl" id="restartBtn" style="flex:0 0 64px" title="Restart claim">↺</button>
   </div>
 
@@ -231,7 +231,7 @@
       <li>⛏️ <b>One per row &amp; column.</b> Each row and each column holds exactly one nugget too.</li>
       <li>🚫 <b>Nuggets never touch</b> — not side-by-side, not even corner-to-corner!</li>
       <li>❤️ <b>Three hearts.</b> Digging an empty shaft costs one. Lose all three and the mine plays out — but the nuggets you've found stay found.</li>
-      <li>👆 <b>Tap</b> a cell to mark a survey X. <b>Double-tap</b> to dig for gold. <b>Drag</b> across cells to survey a whole line.</li>
+      <li>👆 <b>Tap</b> a cell to mark a survey X. <b>Double-tap</b> to dig for gold. <b>Drag</b> across cells to paint a line of X's — or start your drag on an X to wipe X's away.</li>
       <li>💡 <b>Hints</b> ask Sadie to point at a real nugget (3 per claim).</li>
     </ol>
     <button class="big-btn" id="helpClose">Start diggin'!</button>
@@ -602,10 +602,11 @@ function surveyTap(r,c){
   state[r][c]=(s==='note')?'empty':'note';
   drawCell(r,c); sfx('click');
 }
-function paintSurvey(r,c){
-  if(won||!puzzle) return;
-  if(state[r][c]!=='empty') return;
-  state[r][c]='note'; drawCell(r,c);
+function dragPaint(cell){
+  if(won||!puzzle||!cell||!pDown||!pDown.mode) return;
+  var s=state[cell.r][cell.c];
+  if(pDown.mode==='add'&&s==='empty'){ state[cell.r][cell.c]='note'; drawCell(cell.r,cell.c); pDown.changed=true; }
+  else if(pDown.mode==='remove'&&s==='note'){ state[cell.r][cell.c]='empty'; drawCell(cell.r,cell.c); pDown.changed=true; }
 }
 function digCell(r,c){
   if(won||!puzzle) return;
@@ -630,8 +631,10 @@ function digCell(r,c){
     }
   }
 }
-/* Pointer handling: tap toggles a survey X instantly, double-tap digs,
-   dragging paints survey X's across every cell it touches.
+/* Pointer handling: tap toggles a survey X instantly, double-tap digs.
+   Dragging paints or clears survey X's across every cell it touches —
+   the drag takes its cue from the cell it starts on: start on an empty
+   cell and the drag paints X's; start on an X and the drag wipes X's.
    The X appears the moment the tap lands (no waiting to rule out a
    double-tap): if a second tap follows on the same cell, the first tap's
    toggle is reverted and the cell is dug instead. */
@@ -647,25 +650,23 @@ function onBoardDown(e){
   if(won||!puzzle) return;
   var cell=cellFromPoint(e.clientX,e.clientY);
   if(!cell) return;
-  pDown={r:cell.r,c:cell.c,x:e.clientX,y:e.clientY,moved:false,painted:false};
+  var s=state[cell.r][cell.c];
+  var mode=null;
+  if(s==='empty') mode='add';
+  else if(s==='note') mode='remove';
+  pDown={r:cell.r,c:cell.c,x:e.clientX,y:e.clientY,moved:false,changed:false,mode:mode};
   try{boardEl.setPointerCapture(e.pointerId);}catch(err){}
 }
 function onBoardMove(e){
   if(!pDown) return;
   var dx=e.clientX-pDown.x, dy=e.clientY-pDown.y;
   if(!pDown.moved && dx*dx+dy*dy>100) pDown.moved=true;
-  if(pDown.moved){
-    var cell=cellFromPoint(e.clientX,e.clientY);
-    if(cell && state[cell.r][cell.c]==='empty'){
-      paintSurvey(cell.r,cell.c);
-      pDown.painted=true;
-    }
-  }
+  if(pDown.moved) dragPaint(cellFromPoint(e.clientX,e.clientY));
 }
 function onBoardUp(){
   if(!pDown) return;
   var d=pDown; pDown=null;
-  if(d.moved){ if(d.painted) sfx('click'); return; }
+  if(d.moved){ if(d.changed) sfx('click'); return; }
   if(won||!puzzle) return;
   var now=Date.now();
   if(d.r===lastTap.r && d.c===lastTap.c && now-lastTap.t<320 && lastTap.prev!==null){
