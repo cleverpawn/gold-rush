@@ -109,11 +109,6 @@
   #sadieImg.pose-pop{animation:posePop .45s ease-out, bob 3.6s ease-in-out infinite;}
   @keyframes posePop{0%{transform:scale(.82);}60%{transform:scale(1.07);}100%{transform:scale(1);}}
   #sadieWin{animation:cheer 1.1s ease-in-out infinite;}
-  #winCheerWrap{display:flex; align-items:center; justify-content:center; margin-bottom:6px;}
-  #winCheerWrap .applause{font-size:44px; display:inline-block; filter:drop-shadow(0 2px 4px rgba(0,0,0,.45)); animation:clapL .5s ease-in-out infinite;}
-  #applauseR{animation-name:clapR;}
-  @keyframes clapL{0%,100%{transform:translateX(0) rotate(-14deg) scale(1);}50%{transform:translateX(12px) rotate(10deg) scale(1.18);}}
-  @keyframes clapR{0%,100%{transform:translateX(0) rotate(14deg) scale(1);}50%{transform:translateX(-12px) rotate(-10deg) scale(1.18);}}
   #sadieFail{width:110px; height:110px; border-radius:50%; object-fit:cover; border:3px solid var(--gold); margin-bottom:6px; background:#000; animation:droop 1.2s ease-in-out infinite;}
   #bubble{
     position:relative; background:var(--parchment); color:var(--ink); border-radius:12px;
@@ -176,7 +171,7 @@
   .stat-row div{text-align:center;}
   .stat-row .v{font-size:22px; font-weight:800; color:var(--gold);}
   .stat-row .k{font-size:11px; opacity:.7; text-transform:uppercase; letter-spacing:1px;}
-  #sadieWin{width:110px; height:110px; border-radius:50%; object-fit:cover; border:3px solid var(--gold); background:#000;}
+  #sadieWin{width:110px; height:110px; border-radius:50%; object-fit:cover; border:3px solid var(--gold); margin-bottom:6px; background:#000;}
   .footer-note{text-align:center; font-size:11.5px; opacity:.55; margin-top:2px;}
   #authBtn img{width:22px; height:22px; border-radius:50%; vertical-align:-5px; pointer-events:none;}
   #boardList{max-height:52vh; overflow-y:auto; text-align:left; margin:8px 0;}
@@ -314,11 +309,7 @@ var LEVELS=[[6,["200000","220101","224111","424133","444435","444435"],[1,3,0,4,
 
 <div class="overlay" id="winOverlay">
   <div class="card" id="winCard">
-    <div id="winCheerWrap">
-      <span class="applause" id="applauseL" aria-hidden="true">👏</span>
-      <img id="sadieWin" alt="Sadie celebrating">
-      <span class="applause" id="applauseR" aria-hidden="true">👏</span>
-    </div>
+    <img id="sadieWin" alt="Sadie celebrating">
     <h2 id="winTitle">MOTHERLODE!</h2>
     <p id="winQuip"><i>"Pappy's dancin' a jig right now!"</i> — Sadie</p>
     <div class="stat-row">
