@@ -148,7 +148,7 @@
   .card{
     background:linear-gradient(180deg,#2e2113,#21170c); border:2px solid var(--gold-deep);
     border-radius:18px; padding:24px 22px; max-width:420px; width:100%; text-align:center;
-    box-shadow:0 20px 60px rgba(0,0,0,.7); max-height:88vh; overflow-y:auto; position:relative;
+    box-shadow:0 20px 60px rgba(0,0,0,.7); max-height:88vh; overflow-y:auto; overflow-x:hidden; position:relative;
   }
   .card h2{font-family:Georgia,serif; color:var(--gold); margin:0 0 10px; font-size:26px;}
   .card p{font-size:15px; line-height:1.5; margin:8px 0;}
@@ -652,7 +652,7 @@ function sfx(name){
 /* ---------------- Sadie ---------------- */
 var SADIE_POSES={}, poseTimer=null;
 function initPoses(){
-  SADIE_POSES={idle:sadieImg.src, happy:SADIE_POSE_SRC.happy, sad:SADIE_POSE_SRC.sad, think:SADIE_POSE_SRC.think};
+  SADIE_POSES={idle:sadieImg.src, happy:SADIE_POSE_SRC.happy, sad:SADIE_POSE_SRC.sad, think:SADIE_POSE_SRC.think, hug:SADIE_POSE_SRC.hug};
   sadieImg.setAttribute('data-pose','idle');
 }
 function sadieAnim(cls){
