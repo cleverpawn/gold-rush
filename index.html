@@ -540,7 +540,7 @@ function applyGiven(){
     found++;
   }
 }
-var REGION_COLORS=['#e04a3a','#ef8f2e','#d9b32c','#9cc33e','#43b968','#2fbfa5','#35a3dc','#3f6fe0','#7a5ce0','#a44fc4','#d6488f','#c93a5e'];
+var REGION_COLORS=['#c2493b','#d98f2b','#a8922a','#7fa33c','#3f9e5f','#2f9e92','#3a8cc9','#3f5fc9','#6e4f9e','#a34f92','#c24a74','#a85a2e'];
 /* Perceptual color helpers: assign palette colors to regions so that
    neighboring regions contrast as strongly as possible (greedy max-min
    in CIELAB space, most-constrained region first). Deterministic per puzzle. */
@@ -566,23 +566,23 @@ function assignRegionColors(puz){
     if(r+1<n) link(regs[r+1][c], regs[r][c]);
   }
   idList.sort(function(a,b){ return Object.keys(neigh[b]).length-Object.keys(neigh[a]).length; });
-  var assign={};
+  var assign={}, usedColors={};
   idList.forEach(function(id){
     var best=-1, bestScore=-1;
     for(var i=0;i<REGION_COLORS.length;i++){
+      if(usedColors[i]) continue; /* one unique color per region: shared colors confuse the eye */
       var worst=Infinity, clash=false;
       for(var nb in neigh[id]){
         if(nb in assign){
-          if(assign[nb]===i){ clash=true; break; }
           var d=labDist(REGION_LAB[i], REGION_LAB[assign[nb]]);
           if(d<worst) worst=d;
         }
       }
-      if(clash) continue;
       var score=(worst===Infinity?1e9:worst)-i*1e-6;
       if(score>bestScore){ bestScore=score; best=i; }
     }
-    assign[id]=(best<0?0:best);
+    if(best<0) best=0;
+    assign[id]=best; usedColors[best]=1;
   });
   var map={};
   idList.forEach(function(id){ map[id]=REGION_COLORS[assign[id]]; });
