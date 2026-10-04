@@ -184,7 +184,8 @@
   .stat-row div{text-align:center;}
   .stat-row .v{font-size:22px; font-weight:800; color:var(--gold);}
   .stat-row .k{font-size:11px; opacity:.7; text-transform:uppercase; letter-spacing:1px;}
-  #sadieWin{width:100%; height:min(320px,42vh); object-fit:cover; object-position:center 22%; border-radius:16px 16px 0 0; display:block; margin-bottom:14px; background:#000;}
+  #winVideoWrap{position:relative; width:100%; height:min(320px,42vh); overflow:hidden; border-radius:16px 16px 0 0; margin-bottom:14px; background:#000;}
+  #sadieWin{position:absolute; left:50%; top:54%; transform:translate(-50%,-50%); min-width:100%; min-height:100%; width:auto; height:auto; display:block;}
   #winCard{max-width:min(540px,94vw); padding:0 0 26px;}
   #winCard h2, #winCard p{margin-left:22px; margin-right:22px;}
   #winCard .stat-row{margin-left:22px; margin-right:22px;}
@@ -335,7 +336,7 @@ var LEVELS=[[6,["200000","220101","224111","424133","444435","444435"],[1,3,0,4,
 
 <div class="overlay" id="winOverlay">
   <div class="card" id="winCard">
-    <video id="sadieWin" muted playsinline preload="auto" aria-label="Sadie celebrating"></video>
+    <div id="winVideoWrap"><video id="sadieWin" muted playsinline preload="auto" aria-label="Sadie celebrating"></video></div>
     <h2 id="winTitle">MOTHERLODE!</h2>
     <p id="winQuip"><i>"Pappy's dancin' a jig right now!"</i> — Sadie</p>
     <div class="stat-row">
