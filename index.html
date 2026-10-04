@@ -165,6 +165,7 @@
     border-radius:12px; border:1px solid #5a4020; cursor:pointer; color:var(--parchment); background:#33220f;
   }
   .coin-fall{position:absolute; top:-40px; font-size:26px; animation-name:fall; animation-timing-function:linear; animation-fill-mode:forwards; pointer-events:none;}
+  .coin-fall.goldcoin{border-radius:50%; background:radial-gradient(circle at 35% 30%,#ffeda8,#f5c542 55%,#c07f10); border:2px solid #8a5a10; box-shadow:0 2px 6px rgba(0,0,0,.45);}
   @keyframes fall{to{transform:translateY(110vh) rotate(420deg);}}
   .stat-row{display:flex; justify-content:center; gap:22px; margin:12px 0 4px;}
   .stat-row div{text-align:center;}
@@ -869,11 +870,17 @@ function coinShower(){
   var card=$('winCard');
   for(var i=0;i<36;i++){
     var s=document.createElement('span');
-    s.className='coin-fall'; s.textContent=Math.random()<.7?'🪙':'✨';
+    var sz=(18+Math.random()*22);
+    if(Math.random()<.7){
+      s.className='coin-fall goldcoin';
+      s.style.width=sz+'px'; s.style.height=sz+'px';
+    }else{
+      s.className='coin-fall'; s.textContent='✨';
+      s.style.fontSize=sz+'px';
+    }
     s.style.left=(Math.random()*100)+'%';
     s.style.animationDuration=(1.6+Math.random()*1.8)+'s';
     s.style.animationDelay=(Math.random()*0.9)+'s';
-    s.style.fontSize=(18+Math.random()*22)+'px';
     card.appendChild(s);
     (function(el){setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el);},4200);})(s);
   }
