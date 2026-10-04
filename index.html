@@ -807,6 +807,7 @@ function setPose(name, sticky){
   if(sadieImg.getAttribute('data-pose')!==name){
     sadieImg.setAttribute('data-pose',name);
     sadieImg.src=src;
+    sadieImg.alt = dailyMode ? "Pappy, the old prospector, watching your claim" : "Sadie, the old miner's daughter, watching your claim";
     sadieAnim('pose-pop');
   }
   if(poseTimer){clearTimeout(poseTimer); poseTimer=null;}
