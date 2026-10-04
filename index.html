@@ -901,7 +901,7 @@ function loadLevel(idx){
   $('winOverlay').classList.remove('show');
   $('failOverlay').classList.remove('show');
   $('levelsOverlay').classList.remove('show');
-  levelLabel.textContent='Claim '+(idx+1)+' of '+LEVELS.length+' · '+levelName(idx);
+  levelLabel.textContent='Claim '+(idx+1)+' of '+LEVELS.length+' · '+levelSize(idx)+'×'+levelSize(idx)+' · '+levelName(idx);
   $('loading').classList.add('show');
   updateNav();
   setTimeout(function(){
