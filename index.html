@@ -641,8 +641,10 @@ function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a
 /* Deterministic daily pick: same board for everyone, no server.
    dateStr = local YYYY-MM-DD; nowMs = Date.now(); pool = {size:[levelIdx]}. */
 function dailyFor(dateStr,nowMs,pool){
-  var epochDay=Math.floor(nowMs/86400000);
-  var size=[9,10,11,12][epochDay%4];
+  /* Size rotation follows the LOCAL date (noon local dodges DST edges),
+     so the whole daily flips once at local midnight — never at UTC midnight. */
+  var epochDay=Math.floor(new Date(dateStr+'T12:00:00').getTime()/86400000);
+  var size=[9,10,11,12][((epochDay%4)+4)%4];
   var list=pool[size]||pool[''+size]||[];
   var rnd=mulberry32(hash32('pappy-daily|'+dateStr));
   var levelIdx=list.length?list[Math.floor(rnd()*list.length)]:-1;
