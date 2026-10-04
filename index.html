@@ -274,7 +274,7 @@ var LEVELS=[[6,["200000","220101","224111","424133","444435","444435"],[1,3,0,4,
   </div>
 
   <div id="controls">
-    <span id="gestureHint">Tap: survey &nbsp;·&nbsp; Double-tap: dig &nbsp;·&nbsp; Drag: paint or clear X's</span>
+    <span id="gestureHint">Tap: survey &nbsp;·&nbsp; Double-tap: dig &nbsp;·&nbsp; Drag: paint X's</span>
     <button class="ctl" id="restartBtn" style="flex:0 0 64px" title="Restart claim">↺</button>
   </div>
 
@@ -896,8 +896,7 @@ function surveyTap(r,c){
 function dragPaint(cell){
   if(won||!puzzle||!cell||!pDown||!pDown.mode) return;
   var s=state[cell.r][cell.c];
-  if(pDown.mode==='add'&&s==='empty'){ state[cell.r][cell.c]='note'; drawCell(cell.r,cell.c); pDown.changed=true; }
-  else if(pDown.mode==='remove'&&s==='note'){ state[cell.r][cell.c]='empty'; drawCell(cell.r,cell.c); pDown.changed=true; }
+  if(s==='empty'){ state[cell.r][cell.c]='note'; drawCell(cell.r,cell.c); pDown.changed=true; }
 }
 function digCell(r,c){
   if(won||!puzzle) return;
@@ -926,12 +925,11 @@ function digCell(r,c){
   }
 }
 /* Pointer handling: tap toggles a survey X instantly, double-tap digs.
-   Dragging paints or clears survey X's across every cell it touches —
-   the drag takes its cue from the cell it starts on: start on an empty
-   cell and the drag paints X's; start on an X and the drag wipes X's.
-   The X appears the moment the tap lands (no waiting to rule out a
-   double-tap): if a second tap follows on the same cell, the first tap's
-   toggle is reverted and the cell is dug instead. */
+   Dragging paints survey X's across every empty cell it touches — always
+   paints, never erases, so a drag meant to extend a row can't wipe it.
+   (Tap an X to clear it.) The X appears the moment the tap lands (no
+   waiting to rule out a double-tap): if a second tap follows on the same
+   cell, the first tap's toggle is reverted and the cell is dug instead. */
 var lastTap={r:-1,c:-1,t:0,prev:null}, pDown=null;
 function cellFromPoint(x,y){
   var el=document.elementFromPoint(x,y);
@@ -946,8 +944,9 @@ function onBoardDown(e){
   if(!cell) return;
   var s=state[cell.r][cell.c];
   var mode=null;
-  if(s==='empty') mode='add';
-  else if(s==='note') mode='remove';
+  if(s==='empty'||s==='note') mode='add'; /* drag always paints X's: keying
+    erase-mode off the start cell surprised players mid-solve (a drag meant
+    to extend a row of X's would wipe them instead when it began on an X) */
   pDown={r:cell.r,c:cell.c,x:e.clientX,y:e.clientY,moved:false,changed:false,mode:mode};
   try{boardEl.setPointerCapture(e.pointerId);}catch(err){}
 }
