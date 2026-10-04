@@ -1060,8 +1060,8 @@ function onWin(){
   setTimeout(function(){
     say(qp('win'));
     sadieAnim('cheer');
-    /* Pappy cameo: ~10% of wins, never twice running. */
-    var pappyWin=!lastWinPappy&&Math.random()<0.10; lastWinPappy=pappyWin;
+    /* Pappy cameo: always on daily wins (his turf); ~10% on regular wins, never twice running. */
+    var pappyWin=dailyMode?true:(!lastWinPappy&&Math.random()<0.10); lastWinPappy=pappyWin;
     var wv=$('sadieWin');
     wv.poster=pappyWin?SADIE_POSE_SRC.pappyPoster:SADIE_POSE_SRC.winPoster;
     wv.setAttribute('aria-label',pappyWin?'Pappy tipping his hat':'Sadie celebrating');
