@@ -758,6 +758,9 @@ function playDaily(){
 
 /* ---------------- State ---------------- */
 var levelIdx=0, puzzle=null, state=[], hearts=3, hintsLeft=3;
+var noteTime={}, FRESH_X_MS=3000; /* when each cell's X was painted: a drag
+  starting on a freshly-painted X keeps painting (still marking); a drag
+  starting on an older X erases (deliberate clear) */
 var found=0, streak=0, startTime=0, lastSay=0, idleTimer=null, won=false;
 var progress=0, muted=false;
 var totalNuggets=0, heartsLostTotal=0;
@@ -859,7 +862,7 @@ function buildBoard(){
   boardEl.style.gridTemplateColumns='repeat('+n+',minmax(0,1fr))';
   boardEl.style.gridTemplateRows='repeat('+n+',minmax(0,1fr))';
   boardEl.innerHTML='';
-  state=[];
+  state=[]; noteTime={};
   var regionColorMap=assignRegionColors(puzzle);
   for(var r=0;r<n;r++){
     state.push([]);
@@ -891,13 +894,15 @@ function surveyTap(r,c){
   var s=state[r][c];
   if(s==='nugget'||s==='dug') return;
   state[r][c]=(s==='note')?'empty':'note';
+  var key=r+'_'+c;
+  if(state[r][c]==='note') noteTime[key]=Date.now(); else delete noteTime[key];
   drawCell(r,c); sfx('click');
 }
 function dragPaint(cell){
   if(won||!puzzle||!cell||!pDown||!pDown.mode) return;
-  var s=state[cell.r][cell.c];
-  if(pDown.mode==='add'&&s==='empty'){ state[cell.r][cell.c]='note'; drawCell(cell.r,cell.c); pDown.changed=true; }
-  else if(pDown.mode==='remove'&&s==='note'){ state[cell.r][cell.c]='empty'; drawCell(cell.r,cell.c); pDown.changed=true; }
+  var s=state[cell.r][cell.c], key=cell.r+'_'+cell.c;
+  if(pDown.mode==='add'&&s==='empty'){ state[cell.r][cell.c]='note'; noteTime[key]=Date.now(); drawCell(cell.r,cell.c); pDown.changed=true; }
+  else if(pDown.mode==='remove'&&s==='note'){ state[cell.r][cell.c]='empty'; delete noteTime[key]; drawCell(cell.r,cell.c); pDown.changed=true; }
 }
 function digCell(r,c){
   if(won||!puzzle) return;
@@ -928,8 +933,11 @@ function digCell(r,c){
 /* Pointer handling: tap toggles a survey X instantly, double-tap digs.
    Dragging paints or clears survey X's across every cell it touches —
    the drag takes its cue from the cell it starts on: start on an empty
-   cell and the drag paints X's; start on an X and the drag wipes X's.
-   The X appears the moment the tap lands (no waiting to rule out a
+   cell and the drag paints X's; start on an X and the drag wipes X's,
+   EXCEPT a drag starting on a freshly-painted X (under 3s old) keeps
+   painting — you're still marking, not clearing (this also absorbs the
+   iOS touch-stutter where one drag arrives as tap-then-drag). The X
+   appears the moment the tap lands (no waiting to rule out a
    double-tap): if a second tap follows on the same cell, the first tap's
    toggle is reverted and the cell is dug instead. */
 var lastTap={r:-1,c:-1,t:0,prev:null}, pDown=null;
@@ -945,9 +953,9 @@ function onBoardDown(e){
   var cell=cellFromPoint(e.clientX,e.clientY);
   if(!cell) return;
   var s=state[cell.r][cell.c];
-  var mode=null;
+  var mode=null, key=cell.r+'_'+cell.c;
   if(s==='empty') mode='add';
-  else if(s==='note') mode='remove';
+  else if(s==='note') mode=(Date.now()-(noteTime[key]||0)<FRESH_X_MS)?'add':'remove';
   pDown={r:cell.r,c:cell.c,x:e.clientX,y:e.clientY,moved:false,changed:false,mode:mode};
   pDown={r:cell.r,c:cell.c,x:e.clientX,y:e.clientY,moved:false,changed:false,mode:mode};
   try{boardEl.setPointerCapture(e.pointerId);}catch(err){}
