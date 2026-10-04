@@ -274,7 +274,7 @@ var LEVELS=[[6,["200000","220101","224111","424133","444435","444435"],[1,3,0,4,
   </div>
 
   <div id="controls">
-    <span id="gestureHint">Tap: survey &nbsp;·&nbsp; Double-tap: dig &nbsp;·&nbsp; Drag: paint X's</span>
+    <span id="gestureHint">Tap: survey &nbsp;·&nbsp; Double-tap: dig &nbsp;·&nbsp; Drag: paint or clear X's</span>
     <button class="ctl" id="restartBtn" style="flex:0 0 64px" title="Restart claim">↺</button>
   </div>
 
@@ -893,10 +893,36 @@ function surveyTap(r,c){
   state[r][c]=(s==='note')?'empty':'note';
   drawCell(r,c); sfx('click');
 }
+function paintOne(r,c){
+  if(state[r][c]!=='empty') return false;
+  state[r][c]='note'; drawCell(r,c); pDown.changed=true; return true;
+}
+function clearOne(r,c){
+  if(state[r][c]!=='note') return false;
+  state[r][c]='empty'; drawCell(r,c); pDown.changed=true; return true;
+}
 function dragPaint(cell){
   if(won||!puzzle||!cell||!pDown||!pDown.mode) return;
+  if(pDown.mode==='add'){ paintOne(cell.r,cell.c); return; }
+  if(pDown.mode==='remove'){ clearOne(cell.r,cell.c); return; }
+  /* maybe: the drag started on an X. Paint empty cells live, but the moment
+     it touches another X it's an erase drag: undo this gesture's paints and
+     clear X's instead. The start cell never decides alone. */
+  var key=cell.r+'_'+cell.c;
+  if(key===pDown.r+'_'+pDown.c) return;
   var s=state[cell.r][cell.c];
-  if(s==='empty'){ state[cell.r][cell.c]='note'; drawCell(cell.r,cell.c); pDown.changed=true; }
+  if(s==='note'&&pDown.painted.indexOf(key)<0){
+    var i, pr;
+    for(i=0;i<pDown.painted.length;i++){
+      pr=pDown.painted[i].split('_');
+      if(state[+pr[0]][+pr[1]]==='note'){ state[+pr[0]][+pr[1]]='empty'; drawCell(+pr[0],+pr[1]); }
+    }
+    pDown.painted=[];
+    pDown.mode='remove';
+    clearOne(pDown.r,pDown.c); clearOne(cell.r,cell.c);
+  }else if(s==='empty'){
+    if(paintOne(cell.r,cell.c)) pDown.painted.push(key);
+  }
 }
 function digCell(r,c){
   if(won||!puzzle) return;
@@ -925,9 +951,12 @@ function digCell(r,c){
   }
 }
 /* Pointer handling: tap toggles a survey X instantly, double-tap digs.
-   Dragging paints survey X's across every empty cell it touches — always
-   paints, never erases, so a drag meant to extend a row can't wipe it.
-   (Tap an X to clear it.) The X appears the moment the tap lands (no
+   Dragging paints survey X's across every empty cell it touches. Starting
+   the drag on an X doesn't decide anything by itself: touch another X and
+   the drag becomes an eraser (undoing any X's it just painted); otherwise
+   it paints and the start X is left alone. So a drag meant to extend a row
+   of X's can't wipe it, and a deliberate drag across X's still clears them.
+   (Tap an X to clear it single.) The X appears the moment the tap lands (no
    waiting to rule out a double-tap): if a second tap follows on the same
    cell, the first tap's toggle is reverted and the cell is dug instead. */
 var lastTap={r:-1,c:-1,t:0,prev:null}, pDown=null;
@@ -944,9 +973,11 @@ function onBoardDown(e){
   if(!cell) return;
   var s=state[cell.r][cell.c];
   var mode=null;
-  if(s==='empty'||s==='note') mode='add'; /* drag always paints X's: keying
-    erase-mode off the start cell surprised players mid-solve (a drag meant
-    to extend a row of X's would wipe them instead when it began on an X) */
+  if(s==='empty') mode='add';
+  else if(s==='note') mode='maybe'; /* started on an X: paint until the drag
+    proves it's an erase by touching another X (keeps a paint-intended drag
+    from wiping the row it meant to extend) */
+  pDown={r:cell.r,c:cell.c,x:e.clientX,y:e.clientY,moved:false,changed:false,mode:mode,painted:[]};
   pDown={r:cell.r,c:cell.c,x:e.clientX,y:e.clientY,moved:false,changed:false,mode:mode};
   try{boardEl.setPointerCapture(e.pointerId);}catch(err){}
 }
