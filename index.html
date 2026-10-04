@@ -58,13 +58,14 @@
   }
   .icon-btn:active{transform:scale(.94);}
   .icon-btn:disabled{opacity:.35;}
+  #boardWrap{position:relative;}
+  #burstCanvas{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:5;}
   @media(max-width:480px){
     #hud{gap:6px; padding:7px 8px;}
     .icon-btn{font-size:14px; padding:5px 8px;}
     #hearts{font-size:14px; letter-spacing:1px;}
     #levelLabel{font-size:13px;}
   }
-  #boardWrap{position:relative;}
   #board{
     display:grid; gap:3px; background:#0d0906; padding:8px; border-radius:14px;
     border:2px solid #4a3319; box-shadow:0 8px 24px rgba(0,0,0,.55), inset 0 0 40px rgba(0,0,0,.5);
@@ -250,6 +251,7 @@
   <div id="playArea">
   <div id="boardWrap">
     <div id="board"></div>
+    <canvas id="burstCanvas"></canvas>
     <div id="loading">Sadie's stakin' the claims…<br>⛏️</div>
   </div>
 
@@ -963,6 +965,54 @@ function onBoardUp(){
   }
 }
 function onBoardCancel(){ pDown=null; }
+/* Dirt-burst celebration: gold + dirt particles spray from the cell when a
+   nugget is found. One full-board canvas overlay, requestAnimationFrame. */
+var burstParts=[], burstRAF=null;
+function dirtBurst(r,c){
+  if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var wrap=$('boardWrap'), cv=$('burstCanvas');
+  if(!wrap||!cv) return;
+  var dpr=Math.min(2, window.devicePixelRatio||1);
+  var w=wrap.clientWidth, h=wrap.clientHeight;
+  if(!w||!h) return;
+  cv.width=w*dpr; cv.height=h*dpr;
+  var wr=wrap.getBoundingClientRect(), cr=cellEl(r,c).getBoundingClientRect();
+  var x=(cr.left+cr.width/2-wr.left)*dpr, y=(cr.top+cr.height/2-wr.top)*dpr;
+  var dirt=['#8a5a2e','#6b4423','#a0713f','#5c3a1e'], gold=['#f5c542','#ffefa8','#ffe9a8'];
+  for(var i=0;i<18;i++){
+    var gld=Math.random()<0.45, a=Math.random()*Math.PI*2, sp=(gld?60:40)+Math.random()*130;
+    burstParts.push({x:x, y:y,
+      vx:Math.cos(a)*sp*dpr, vy:(Math.sin(a)*sp-90)*dpr,
+      life:0, max:0.55+Math.random()*0.35,
+      sz:(gld?2:2.5)+Math.random()*3,
+      col:gld?gold[i%3]:dirt[i%4], gold:gld});
+  }
+  if(!burstRAF) burstRAF=requestAnimationFrame(burstTick);
+}
+function burstTick(t){
+  var cv=$('burstCanvas');
+  if(!cv){ burstRAF=null; return; }
+  var ctx=cv.getContext('2d'), dpr=Math.min(2, window.devicePixelRatio||1);
+  var last=burstTick._l||t, dt=Math.min(0.05,(t-last)/1000); burstTick._l=t;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  burstParts=burstParts.filter(function(p){
+    p.life+=dt; if(p.life>=p.max) return false;
+    p.vy+=520*dpr*dt; p.x+=p.vx*dt; p.y+=p.vy*dt;
+    var k=1-p.life/p.max;
+    ctx.globalAlpha=k; ctx.fillStyle=p.col;
+    if(p.gold){
+      var s=p.sz*dpr*(0.6+0.4*k);
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.life*6);
+      ctx.fillRect(-s/2,-s/2,s,s); ctx.restore();
+    }else{
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.sz*dpr*k*0.5+0.5,0,7); ctx.fill();
+    }
+    return true;
+  });
+  ctx.globalAlpha=1;
+  if(burstParts.length) burstRAF=requestAnimationFrame(burstTick);
+  else{ burstRAF=null; burstTick._l=0; }
+}
 function placeNugget(r,c,viaHint){
   var freezeHere=false;
   if(!viaHint&&!dailyMode&&!freezeDroppedThisPuzzle&&getFreezeCount()===0&&Math.random()<DROP_RATE){
@@ -973,6 +1023,7 @@ function placeNugget(r,c,viaHint){
   totalNuggets++; saveStats();
   setPose('happy');
   var el=cellEl(r,c); el.classList.add('pop');
+  dirtBurst(r,c);
   var spark=document.createElement('span');spark.className='spark';spark.innerHTML='<i></i>';el.appendChild(spark);
   setTimeout(function(){if(spark.parentNode)spark.parentNode.removeChild(spark);},650);
   found++;
