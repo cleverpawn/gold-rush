@@ -995,6 +995,7 @@ function onWin(){
   }catch(e){}
   if(!dailyMode) cloudPush();
   updateNav();
+  if(dailyMode) recordDailyWin();
   setTimeout(function(){
     say(qp('win'));
     sadieAnim('cheer');
@@ -1004,7 +1005,7 @@ function onWin(){
     var secs=Math.floor((Date.now()-startTime)/1000);
     $('winTime').textContent=Math.floor(secs/60)+':'+('0'+(secs%60)).slice(-2);
     $('winHearts').textContent='❤️'.repeat(hearts)+'🖤'.repeat(3-hearts);
-    if(dailyMode){ recordDailyWin(); $('winNext').textContent='🏠 Back to camp'; }
+    if(dailyMode){ $('winNext').textContent='🏠 Back to camp'; }
     else $('winNext').textContent=(levelIdx+1<LEVELS.length)?'Next claim ▶':'Play again ↺';
     $('winOverlay').classList.add('show');
     coinShower();
