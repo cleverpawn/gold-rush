@@ -1068,17 +1068,17 @@ function onWin(){
   updateNav();
   if(dailyMode) recordDailyWin();
   setTimeout(function(){
-    say(qp('win'));
-    sadieAnim('cheer');
     /* Pappy cameo: always on daily wins (his turf); ~10% on regular wins, never twice running. */
     var pappyWin=dailyMode?true:(!lastWinPappy&&Math.random()<0.10); lastWinPappy=pappyWin;
+    say(pappyWin?pick(PAPPY_QUIPS.win):qp('win'));
+    sadieAnim('cheer');
     var wv=$('sadieWin');
     wv.poster=pappyWin?SADIE_POSE_SRC.pappyPoster:SADIE_POSE_SRC.winPoster;
     wv.setAttribute('aria-label',pappyWin?'Pappy tipping his hat':'Sadie celebrating');
     if(wv.getAttribute('data-clip')!==(pappyWin?'p':'s')){ wv.src=pappyWin?SADIE_POSE_SRC.pappyClip:SADIE_POSE_SRC.winClip; wv.setAttribute('data-clip',pappyWin?'p':'s'); }
     try{ wv.currentTime=0; wv.play(); }catch(e){}
     $('winTitle').textContent=pick(["MOTHERLODE!","STRUCK IT RICH!","GOLD FEVER!"]);
-    $('winQuip').innerHTML='<i>"'+qp('win')+'"</i> — '+(dailyMode?'Pappy':'Sadie');
+    $('winQuip').innerHTML='<i>"'+(pappyWin?pick(PAPPY_QUIPS.win):qp('win'))+'"</i> — '+(pappyWin?'Pappy':'Sadie');
     $('winNuggets').textContent=puzzle.n+'/'+puzzle.n;
     var secs=Math.floor((Date.now()-startTime)/1000);
     $('winTime').textContent=Math.floor(secs/60)+':'+('0'+(secs%60)).slice(-2);
