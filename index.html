@@ -1286,6 +1286,16 @@ boardEl.addEventListener('pointerdown',onBoardDown);
 boardEl.addEventListener('pointermove',onBoardMove);
 boardEl.addEventListener('pointerup',onBoardUp);
 boardEl.addEventListener('pointercancel',onBoardCancel);
+/* iOS double-tap zoom prevention (harmless if not needed) */
+document.addEventListener('dblclick', function(e){ e.preventDefault(); }, {passive:false});
+(function(){
+  var lastTe=0;
+  boardEl.addEventListener('touchend', function(e){
+    var now=Date.now();
+    if(now-lastTe<400) e.preventDefault();
+    lastTe=now;
+  }, {passive:false});
+})();
 $('jumpBtn').addEventListener('click',function(){sfx('click');openLevels();});
 $('levelsClose').addEventListener('click',function(){sfx('click');$('levelsOverlay').classList.remove('show');});
 $('pgPrev').addEventListener('click',function(){if(levelPage>0){levelPage--;renderLevelGrid();sfx('click');}});
