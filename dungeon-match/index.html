@@ -110,10 +110,12 @@
       }
       .torch.left { left: -110px; }
       .torch.right { right: -110px; animation-delay: 1.7s; }
+      /* 1B.1: flicker animates opacity only — compositor work, no repaint
+         of the blurred glow on every frame. */
       @keyframes flicker {
-        0%, 100% { opacity: 0.85; transform: scale(1); }
-        42% { opacity: 1; transform: scale(1.05); }
-        63% { opacity: 0.72; transform: scale(0.97); }
+        0%, 100% { opacity: 0.85; }
+        42% { opacity: 1; }
+        63% { opacity: 0.72; }
       }
       @media (prefers-reduced-motion: reduce) {
         .torch { animation: none; }
@@ -642,8 +644,15 @@
         cursor: pointer;
         touch-action: none;
         z-index: 2;
-        will-change: transform;
+        /* 1B.1: will-change on all 64 pieces forced 64 permanent GPU layers
+           and starved mobile memory. Layers are now promoted only while a
+           piece is actually moving (.moving / .dragging). */
+        contain: layout style;
+        backface-visibility: hidden;
       }
+      .piece.moving, .piece.dragging { will-change: transform; }
+      .piece.dragging { z-index: 12 !important; transition: none; }
+      .piece.dragging img { transform: scale(1.07); }
       .piece img {
         width: 96%;
         height: 96%;
@@ -667,14 +676,18 @@
       }
       .piece.selected img { transform: scale(1.09); filter: brightness(1.22) drop-shadow(0 4px 5px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 9px rgba(232, 200, 119, 0.65)); }
       .piece.clearing { z-index: 4; pointer-events: none; }
-      .piece.clearing img { animation: piece-clear 380ms ease-in forwards; }
+      /* 1B.1: clear is transform + opacity only (compositor). Animating
+         filter: brightness() repainted every clearing piece each frame;
+         the bright highlight now comes from a brief scale pulse in the
+         first third, then a fast dissolve. Shorter: 280ms vs 380ms. */
+      .piece.clearing img { animation: piece-clear 280ms cubic-bezier(.3,.6,.4,1) forwards; }
       @keyframes piece-clear {
-        0% { transform: scale(1); opacity: 1; filter: brightness(1); }
-        32% { transform: scale(1.16); opacity: 1; filter: brightness(1.75); }
-        100% { transform: scale(0.25) rotate(10deg); opacity: 0; filter: brightness(2); }
+        0% { transform: scale(1); opacity: 1; }
+        30% { transform: scale(1.17); opacity: 1; }
+        100% { transform: scale(0.22) rotate(10deg); opacity: 0; }
       }
-      .piece.cascade-2.clearing img { animation-duration: 340ms; }
-      .piece.cascade-3.clearing img { animation-duration: 300ms; }
+      .piece.cascade-2.clearing img { animation-duration: 250ms; }
+      .piece.cascade-3.clearing img { animation-duration: 220ms; }
       .fx-particle {
         position: absolute;
         width: 7px;
@@ -683,10 +696,12 @@
         border-radius: 2px;
         pointer-events: none;
         z-index: 6;
+        will-change: transform, opacity;
       }
       @media (prefers-reduced-motion: reduce) {
         .piece.clearing img { animation-duration: 60ms; }
         .piece.selected img { transform: none; }
+        .piece.dragging img { transform: none; }
       }
 
       .legend {
@@ -1162,6 +1177,14 @@
           TYPE_LIST.forEach(function (t) {
             var img = boardEl ? boardEl.querySelector(".tile." + t + " img") : null;
             srcMap[t] = img ? img.src : FALLBACK_SRC[t];
+            /* 1B.1: warm the decode cache for each type once, up front, so
+               a piece created mid-cascade never pays a first-decode hitch
+               on the frame it appears. Same URL = same cached bitmap. */
+            try {
+              var warm = new Image();
+              warm.src = srcMap[t];
+              if (warm.decode) warm.decode().catch(function () {});
+            } catch (err) {}
           });
         })();
 
@@ -1172,34 +1195,88 @@
         var cellPx = 0, stepPx = 0;
 
         function wait(ms) {
-          return new Promise(function (res) { setTimeout(res, reducedMotion ? Math.min(ms, 45) : ms); });
+          return new Promise(function (res) { setTimeout(res, reducedMotion ? Math.min(ms, 40) : ms); });
         }
         function dur(ms) { return reducedMotion ? 0 : ms; }
         function randType() { return TYPE_LIST[Math.floor(Math.random() * TYPE_LIST.length)]; }
 
-        function measure() {
+        /* ---- 1B.1 measurement cache ----
+           Before: place() read boardEl.clientWidth on EVERY call, so one
+           gravity pass forced dozens of synchronous layout recalculations
+           (layout thrashing) while pieces were trying to animate.
+           Now the board is measured once and cached; the cache is only
+           invalidated on resize / board reveal. */
+        var measureValid = false;
+        function measure(force) {
+          if (measureValid && !force) return true;
           if (!boardEl) return false;
           var w = boardEl.clientWidth;
           if (!w) return false;
           var gap = Math.min(6, Math.max(3, window.innerWidth * 0.007));
           cellPx = (w - 7 * gap) / COLS;
           stepPx = cellPx + gap;
+          measureValid = true;
           return true;
         }
+        function invalidateMeasure() { measureValid = false; }
 
+        function sizePiece(piece) {
+          if (!piece || piece._sizedFor === cellPx) return;
+          piece._sizedFor = cellPx;
+          piece.el.style.width = cellPx + "px";
+          piece.el.style.height = cellPx + "px";
+        }
+        function destX(piece) { return piece.c * stepPx; }
+        function destY(piece) { return piece.r * stepPx; }
+
+        /* Instant positioning (no animation). Width/height are written
+           only when the cell size actually changed, not on every move. */
         function place(piece, animatedMs, easing) {
           if (!piece || !piece.el) return;
           if (!measure()) { piece.el.style.transform = ""; return; }
-          piece.el.style.width = cellPx + "px";
-          piece.el.style.height = cellPx + "px";
+          sizePiece(piece);
           var d = animatedMs ? dur(animatedMs) : 0;
           piece.el.style.transition = d ? ("transform " + d + "ms " + (easing || "cubic-bezier(.25,.8,.35,1)")) : "none";
-          piece.el.style.transform = "translate(" + (piece.c * stepPx) + "px," + (piece.r * stepPx) + "px)";
+          piece.el.style.transform = "translate3d(" + destX(piece) + "px," + destY(piece) + "px,0)";
           piece.el.style.zIndex = String(2 + piece.r);
         }
+
+        /* FLIP move via the Web Animations API: the element's resting
+           transform is set to its destination immediately, then WAAPI
+           animates transform from the captured start point. Transform
+           animations run on the compositor — no per-frame layout or
+           paint — and animation.finished resolves exactly when motion
+           ends, so stages chain with no guessed setTimeout padding. */
+        function moveAnim(piece, fromX, fromY, durationMs, easing) {
+          if (!piece || !piece.el || !measure()) return Promise.resolve();
+          sizePiece(piece);
+          piece.el.style.transition = "none";
+          piece.el.style.transform = "translate3d(" + destX(piece) + "px," + destY(piece) + "px,0)";
+          piece.el.style.zIndex = String(2 + piece.r);
+          var d = dur(durationMs);
+          if (!d || (fromX === destX(piece) && fromY === destY(piece)) || !piece.el.animate) {
+            return Promise.resolve();
+          }
+          piece.el.classList.add("moving");
+          var anim;
+          try {
+            anim = piece.el.animate([
+              { transform: "translate3d(" + fromX + "px," + fromY + "px,0)" },
+              { transform: "translate3d(" + destX(piece) + "px," + destY(piece) + "px,0)" }
+            ], { duration: d, easing: easing || "cubic-bezier(.25,.8,.35,1)", fill: "none" });
+          } catch (err) {
+            piece.el.classList.remove("moving");
+            return Promise.resolve();
+          }
+          var finished = (anim && anim.finished) ? anim.finished.catch(function () {}) : wait(d);
+          return finished.then(function () { piece.el.classList.remove("moving"); });
+        }
+
         function layoutAll() {
+          invalidateMeasure();
+          if (!measure(true)) return;
           for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
-            if (grid[r] && grid[r][c]) place(grid[r][c], 0);
+            if (grid[r] && grid[r][c]) { grid[r][c]._sizedFor = 0; place(grid[r][c], 0); }
           }
         }
 
@@ -1214,6 +1291,7 @@
           img.src = srcMap[type];
           img.alt = "";
           img.draggable = false;
+          img.decoding = "async";
           el.appendChild(img);
           var piece = { id: nextPieceId++, type: type, r: r, c: c, el: el };
           el._piece = piece;
@@ -1283,8 +1361,10 @@
           return t; /* vanishingly unlikely; recovery check below still applies */
         }
 
+        var lastDropPromises = [];
         function buildBoardFrom(types, dropIn) {
           boardEl.innerHTML = "";
+          lastDropPromises = [];
           var bg = document.createElement("div");
           bg.className = "board-bg";
           bg.setAttribute("aria-hidden", "true");
@@ -1295,6 +1375,7 @@
           }
           boardEl.appendChild(bg);
           grid = [];
+          measure();
           for (var r = 0; r < ROWS; r++) {
             grid.push([]);
             for (var c = 0; c < COLS; c++) {
@@ -1302,13 +1383,11 @@
               grid[r].push(piece);
               boardEl.appendChild(piece.el);
               if (dropIn && measure()) {
-                var destR = r;
-                piece.r = r - ROWS;
-                place(piece, 0);
-                piece.r = destR;
-                /* force reflow so the drop-in transition runs */
-                void piece.el.offsetWidth;
-                place(piece, dur(300) ? 300 : 0, "cubic-bezier(.25,.8,.35,1)");
+                /* FLIP drop-in: no forced reflow (the old code read
+                   offsetWidth 64 times here, one layout per piece). */
+                var fromY = (r - ROWS) * stepPx;
+                var fromX = c * stepPx;
+                lastDropPromises.push(moveAnim(piece, fromX, fromY, 300, "cubic-bezier(.45,.05,.65,1)"));
               } else {
                 place(piece, 0);
               }
@@ -1339,10 +1418,10 @@
             var ang = (Math.PI * 2 * i) / 5 + Math.random() * 0.7;
             var dist = cellPx * (0.55 + Math.random() * 0.45);
             var anim = p.animate([
-              { transform: "translate(0,0) rotate(0deg)", opacity: 1 },
-              { transform: "translate(" + (Math.cos(ang) * dist) + "px," + (Math.sin(ang) * dist - cellPx * 0.18) + "px) rotate(140deg)", opacity: 0 }
-            ], { duration: 360 + Math.random() * 120, easing: "cubic-bezier(.2,.7,.3,1)" });
-            (function (node) { if (anim && anim.finished) anim.finished.then(function () { node.remove(); }, function () { node.remove(); }); else setTimeout(function () { node.remove(); }, 520); })(p);
+              { transform: "translate3d(0,0,0) rotate(0deg)", opacity: 1 },
+              { transform: "translate3d(" + (Math.cos(ang) * dist) + "px," + (Math.sin(ang) * dist - cellPx * 0.18) + "px,0) rotate(140deg)", opacity: 0 }
+            ], { duration: 300 + Math.random() * 90, easing: "cubic-bezier(.2,.7,.3,1)" });
+            (function (node) { if (anim && anim.finished) anim.finished.then(function () { node.remove(); }, function () { node.remove(); }); else setTimeout(function () { node.remove(); }, 440); })(p);
           }
         }
 
@@ -1364,18 +1443,35 @@
           return [pa, pb];
         }
 
-        async function attemptSwap(a, b) {
+        /* aFromPx / bFromPx: optional pixel start points (live-drag offset)
+           so a swipe's motion starts exactly where the finger left the
+           piece — no jump back to the cell origin before animating. */
+        async function attemptSwap(a, b, aFromPx, bFromPx) {
           if (busy || !grid[a.r][a.c] || !grid[b.r][b.c]) return;
           busy = true;
           setSelected(null);
-          var swapped = swapInGrid(a, b);
-          swapped.forEach(function (p) { if (p) place(p, 200, "cubic-bezier(.3,.7,.3,1)"); });
-          await wait(215);
+          measure();
+          var pa0 = grid[a.r][a.c], pb0 = grid[b.r][b.c];
+          var aFrom = aFromPx || { x: a.c * stepPx, y: a.r * stepPx };
+          var bFrom = bFromPx || { x: b.c * stepPx, y: b.r * stepPx };
+          swapInGrid(a, b);
+          /* Motion starts on the next frame after the tap/swipe — the
+             pieces are persistent elements, they travel, never teleport. */
+          await Promise.all([
+            pa0 ? moveAnim(pa0, aFrom.x, aFrom.y, 175, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve(),
+            pb0 ? moveAnim(pb0, bFrom.x, bFrom.y, 175, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve()
+          ]);
           if (Object.keys(findMatches()).length === 0) {
-            /* invalid: visibly return both pieces, logical board restored */
-            var back = swapInGrid(b, a);
-            back.forEach(function (p) { if (p) place(p, 240, "cubic-bezier(.34,1.4,.64,1)"); });
-            await wait(255);
+            /* invalid: fluid return with a restrained overshoot settle,
+               logical board restored exactly. 190ms back vs 240+15 before,
+               and the return starts the frame the outward move ends. */
+            var backFromA = { x: b.c * stepPx, y: b.r * stepPx };
+            var backFromB = { x: a.c * stepPx, y: a.r * stepPx };
+            swapInGrid(b, a);
+            await Promise.all([
+              pa0 ? moveAnim(pa0, backFromA.x, backFromA.y, 195, "cubic-bezier(.34,1.35,.64,1)") : Promise.resolve(),
+              pb0 ? moveAnim(pb0, backFromB.x, backFromB.y, 195, "cubic-bezier(.34,1.35,.64,1)") : Promise.resolve()
+            ]);
             busy = false;
             return;
           }
@@ -1399,44 +1495,51 @@
               p.el.classList.add("clearing", "cascade-" + Math.min(cascade, 3));
               spawnParticles(p);
             });
-            await wait(395);
+            /* 1B.1: clear stage is 280/250/220ms by cascade (was a fixed
+               395ms wait regardless). The wait now matches the CSS. */
+            await wait(cascade >= 3 ? 225 : (cascade === 2 ? 255 : 285));
             matched.forEach(function (p) {
               grid[p.r][p.c] = null;
               p.el.remove();
             });
-            /* gravity + refill, animated together */
-            var maxMs = 0;
+            /* Gravity + refill together, all at once — no stagger, no
+               forced reflows, and the stage ends on animation.finished
+               instead of a guessed duration + 40ms of dead time.
+               Falls accelerate (ease-in curve) with duration scaled to
+               distance: 1 row ≈ 150ms, capped at 325ms (was up to 430). */
+            measure();
+            var moves = [];
             for (var c = 0; c < COLS; c++) {
               var write = ROWS - 1, r, piece;
               for (r = ROWS - 1; r >= 0; r--) {
                 piece = grid[r][c];
                 if (!piece) continue;
                 if (piece.r !== write) {
+                  var fromY = piece.r * stepPx, fromX = piece.c * stepPx;
                   var distRows = write - piece.r;
                   grid[piece.r][c] = null;
                   piece.r = write;
                   grid[write][c] = piece;
-                  var fallMs = Math.min(430, 150 + distRows * 80);
-                  maxMs = Math.max(maxMs, fallMs);
-                  place(piece, fallMs, "cubic-bezier(.45,.65,.45,1)");
+                  var fallMs = Math.min(325, 110 + distRows * 55);
+                  moves.push(moveAnim(piece, fromX, fromY, fallMs, "cubic-bezier(.5,.05,.7,.5)"));
                 }
                 write--;
               }
               var empty = write + 1; /* rows 0..write are empty */
               for (r = write; r >= 0; r--) {
-                var np = createPiece(randType(), r - empty, c);
-                np.r = r - empty;
+                var spawnR = r - empty;
+                var np = createPiece(randType(), spawnR, c);
                 boardEl.appendChild(np.el);
-                place(np, 0);
+                var sFromX = c * stepPx, sFromY = spawnR * stepPx;
                 np.r = r;
                 grid[r][c] = np;
-                void np.el.offsetWidth;
-                var refillMs = Math.min(430, 170 + empty * 70);
-                maxMs = Math.max(maxMs, refillMs);
-                place(np, refillMs, "cubic-bezier(.45,.65,.45,1)");
+                var refillMs = Math.min(325, 125 + empty * 50);
+                moves.push(moveAnim(np, sFromX, sFromY, refillMs, "cubic-bezier(.5,.05,.7,.5)"));
               }
             }
-            await wait(maxMs + 40);
+            if (moves.length) await Promise.all(moves);
+            /* Next cascade (if any) is detected on the very next frame —
+               no idle gap between fall and the following match. */
           }
           /* dead board recovery: build a fresh playable arrangement */
           if (!hasMoveIn(gridTypes())) await regenerateBoard();
@@ -1446,7 +1549,8 @@
           setSelected(null);
           var types = generateTypes();
           buildBoardFrom(types, true);
-          await wait(320);
+          if (lastDropPromises.length) await Promise.all(lastDropPromises);
+          else await wait(300);
         }
 
         /* ---------- input: tap-to-swap + drag/swipe-to-swap ---------- */
@@ -1469,14 +1573,45 @@
             if (busy) return;
             var pieceEl = e.target && e.target.closest ? e.target.closest(".piece") : null;
             if (!pieceEl || !pieceEl._piece) return;
-            dragState = { x: e.clientX, y: e.clientY, r: pieceEl._piece.r, c: pieceEl._piece.c, id: e.pointerId };
+            /* 1B.1: respond on pointerdown, not pointerup. Before, nothing
+               moved or lit up until the finger lifted — a whole gesture's
+               worth of dead time that read as lag. The piece now lifts
+               instantly and follows the finger (see pointermove). */
+            measure();
+            dragState = {
+              x: e.clientX, y: e.clientY, r: pieceEl._piece.r, c: pieceEl._piece.c,
+              id: e.pointerId, el: pieceEl, piece: pieceEl._piece,
+              offX: 0, offY: 0, axis: null
+            };
+            pieceEl.classList.add("dragging");
             try { boardEl.setPointerCapture(e.pointerId); } catch (err) { /* capture is best-effort */ }
             e.preventDefault();
           });
+          boardEl.addEventListener("pointermove", function (e) {
+            if (!dragState || e.pointerId !== dragState.id || busy) return;
+            var dx = e.clientX - dragState.x, dy = e.clientY - dragState.y;
+            if (!dragState.axis) {
+              if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+              dragState.axis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+            }
+            /* Follow on the dominant axis only, clamped to one cell —
+               diagonal drift never shears the piece off its row/column. */
+            var offX = 0, offY = 0;
+            if (dragState.axis === "x") offX = Math.max(-stepPx, Math.min(stepPx, dx));
+            else offY = Math.max(-stepPx, Math.min(stepPx, dy));
+            dragState.offX = offX; dragState.offY = offY;
+            var p = dragState.piece;
+            p.el.style.transition = "none";
+            p.el.style.transform = "translate3d(" + (p.c * stepPx + offX) + "px," + (p.r * stepPx + offY) + "px,0)";
+          });
+          function endDragVisual(start) {
+            if (start && start.el) start.el.classList.remove("dragging");
+          }
           boardEl.addEventListener("pointerup", function (e) {
             if (!dragState || e.pointerId !== dragState.id) return;
             var start = dragState; dragState = null;
-            if (busy) return;
+            endDragVisual(start);
+            if (busy) { if (start.piece) place(start.piece, 0); return; }
             var dx = e.clientX - start.x, dy = e.clientY - start.y;
             var adx = Math.abs(dx), ady = Math.abs(dy);
             var threshold = 22;
@@ -1484,17 +1619,30 @@
               var dr = 0, dc = 0;
               if (adx > ady * 1.3) dc = dx > 0 ? 1 : -1;
               else if (ady > adx * 1.3) dr = dy > 0 ? 1 : -1;
-              else return; /* diagonal / ambiguous gesture: rejected */
+              else { if (start.piece) place(start.piece, 0); return; } /* diagonal / ambiguous: rejected, piece already home */
               var nr = start.r + dr, nc = start.c + dc;
-              if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) return;
+              if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) { if (start.piece) place(start.piece, 0); return; }
               setSelected(null);
-              attemptSwap({ r: start.r, c: start.c }, { r: nr, c: nc });
+              /* Start the swap from the dragged offset so motion is
+                 continuous with the finger — no snap-back first. */
+              var aFrom = { x: start.c * stepPx + (start.offX || 0), y: start.r * stepPx + (start.offY || 0) };
+              attemptSwap({ r: start.r, c: start.c }, { r: nr, c: nc }, aFrom, null);
             } else {
+              /* Small wiggle that wasn't a swipe: settle back instantly,
+                 then treat as a tap. */
+              if (start.piece && (start.offX || start.offY)) {
+                var fromX = start.c * stepPx + (start.offX || 0), fromY = start.r * stepPx + (start.offY || 0);
+                var sp = start.piece; sp.r = start.r; sp.c = start.c;
+                moveAnim(sp, fromX, fromY, 110, "cubic-bezier(.3,.7,.3,1)");
+              }
               handleTap(start.r, start.c);
             }
             e.preventDefault();
           });
-          boardEl.addEventListener("pointercancel", function () { dragState = null; });
+          boardEl.addEventListener("pointercancel", function () {
+            if (dragState) { endDragVisual(dragState); if (dragState.piece) place(dragState.piece, 0); }
+            dragState = null;
+          });
           boardEl.addEventListener("contextmenu", function (e) { e.preventDefault(); });
         }
 
@@ -1503,7 +1651,7 @@
           var lastW = 0;
           new ResizeObserver(function () {
             var w = boardEl.clientWidth;
-            if (w && w !== lastW) { lastW = w; if (!busy) layoutAll(); }
+            if (w && w !== lastW) { lastW = w; invalidateMeasure(); if (!busy) layoutAll(); }
           }).observe(boardEl);
         }
         window.addEventListener("resize", function () { if (!busy) layoutAll(); });
