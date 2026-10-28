@@ -925,19 +925,25 @@
       .piece.selected img { transform: scale(1.09); filter: brightness(1.22) drop-shadow(0 4px 5px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 9px rgba(232, 200, 119, 0.65)); }
       .piece.clearing { z-index: 4; pointer-events: none; }
       /* Milestone 1E.2: match anticipation + visible destruction.
-         Matched pieces first brighten and pulse, then HOLD (~160ms,
-         artwork fully intact) so the player can see exactly what is
-         about to break; then they shatter over ~370ms in staged
-         scale/rotation steps — never an instant fade to zero. Every
-         cascade uses the SAME durations (the old 1B.1 cascade-2/3
-         speed-ups are removed). Per-type character — metallic shards,
-         crystal shards, soul wisps — comes from spawnParticles. */
+         Matched pieces first brighten and pulse, then HOLD (artwork
+         fully intact) so the player can see exactly what is about to
+         break; then they shatter in staged scale/rotation steps —
+         never an instant fade to zero. Every cascade uses the SAME
+         durations (the old 1B.1 cascade-2/3 speed-ups are removed).
+         Per-type character — metallic shards, crystal shards, soul
+         wisps — comes from spawnParticles.
+         Milestone 1E.2M: the pulse and clear durations are read from
+         --dm-pulse-ms / --dm-clear-ms, which the script sets from the
+         active animation profile (desktop = the exact 1E.2 values,
+         170ms / 370ms; mobile = longer). The keyframes themselves —
+         the staged break — are shared unchanged by both profiles;
+         only their duration stretches. */
       .piece.sword { --fx: #e8c877; }
       .piece.shield { --fx: #8fc1ee; }
       .piece.heart { --fx: #ff8296; }
       .piece.soul { --fx: #c9a8ff; }
       .piece.matched { z-index: 5; pointer-events: none; filter: brightness(1.38) saturate(1.25); }
-      .piece.matched img { animation: piece-match-pulse 170ms ease-in-out forwards; }
+      .piece.matched img { animation: piece-match-pulse var(--dm-pulse-ms, 170ms) ease-in-out forwards; }
       @keyframes piece-match-pulse {
         0% { transform: scale(1); }
         55% { transform: scale(1.15); }
@@ -952,7 +958,7 @@
         box-shadow: 0 0 14px var(--fx, #ffffff), inset 0 0 12px var(--fx, #ffffff);
         pointer-events: none;
       }
-      .piece.clearing img { animation: piece-clear 370ms cubic-bezier(.3,.6,.4,1) forwards; }
+      .piece.clearing img { animation: piece-clear var(--dm-clear-ms, 370ms) cubic-bezier(.3,.6,.4,1) forwards; }
       @keyframes piece-clear {
         0% { transform: scale(1.09) rotate(0deg); opacity: 1; }
         18% { transform: scale(1.17) rotate(-3deg); opacity: 1; }
@@ -1712,9 +1718,87 @@
            195ms back; a formed match pulses and holds 160ms before
            destruction; destruction runs 370ms; falls and refills run
            272–400ms scaled by distance. Reduced-motion collapses all
-           of these via wait()/dur() and the CSS media query. */
-        var ANIM = { swap: 175, swapBack: 195, matchHold: 160, destroy: 370 };
-        function fallDuration(rows) { return Math.min(400, 250 + Math.max(1, rows) * 22); }
+           of these via wait()/dur() and the CSS media query.
+
+           Milestone 1E.2M — animation presentation profiles. ONE
+           shared gameplay/animation implementation reads every timing
+           and particle parameter from the ACTIVE profile below; only
+           the numbers differ. The DESKTOP profile carries the 1E.2
+           values EXACTLY (they are the baseline, verified by diff).
+           The MOBILE profile stretches the same staged animations for
+           small portrait touch screens: swap stays responsive
+           (190ms), the match glow/hold lengthens to 280ms with the
+           artwork fully intact, destruction stretches to 600ms (the
+           same staged-break keyframes and particles, given longer to
+           play — not a delay bolted onto an instant vanish), falls
+           run 354–500ms by distance, and particles are fewer but
+           larger, brighter-glowed and travel a little further
+           (particleScale / travelScale / glowPx) so they read at
+           phone tile sizes. Profile choice is capability-based, never
+           a user-agent string: a coarse (touch) primary pointer AND
+           a phone-sized portrait viewport. A narrow desktop window
+           (fine pointer) therefore stays on the desktop profile.
+           The profile is (re)selected only while input is idle —
+           at battle start, on resize, and at the start of each swap —
+           and is then LOCKED for the whole resolution sequence, so a
+           stage never changes speed mid-flight. */
+        var ANIM_PROFILES = {
+          desktop: {
+            swap: 175, swapBack: 195, matchHold: 160, destroy: 370,
+            pulseMs: 170, dropIn: 340,
+            fallBase: 250, fallPerRow: 22, fallMax: 400,
+            particleScale: 1, travelScale: 1, glowPx: 7,
+            fx: {
+              sword:  { count: 9,  colors: ["#f0d488", "#e3ac3c", "#d9dce4", "#fff6d8"], kind: "shard", durMin: 340, durVar: 130 },
+              shield: { count: 9,  colors: ["#cfe4fa", "#5b9bd5", "#f2f7fd", "#aebfd2"], kind: "shard", durMin: 340, durVar: 130 },
+              heart:  { count: 10, colors: ["#ff8296", "#e0495c", "#ffc9d2", "#ffffff"], kind: "shard", durMin: 350, durVar: 140 },
+              soul:   { count: 8,  colors: ["#d9c2ff", "#a678e8", "#8b5fe0", "#f1eaff"], kind: "wisp",  durMin: 440, durVar: 170 }
+            }
+          },
+          mobile: {
+            swap: 190, swapBack: 210, matchHold: 280, destroy: 600,
+            pulseMs: 280, dropIn: 420,
+            fallBase: 330, fallPerRow: 24, fallMax: 500,
+            particleScale: 1.7, travelScale: 1.2, glowPx: 10,
+            fx: {
+              sword:  { count: 7, colors: ["#f0d488", "#e3ac3c", "#d9dce4", "#fff6d8"], kind: "shard", durMin: 520, durVar: 160 },
+              shield: { count: 7, colors: ["#cfe4fa", "#5b9bd5", "#f2f7fd", "#aebfd2"], kind: "shard", durMin: 520, durVar: 160 },
+              heart:  { count: 8, colors: ["#ff8296", "#e0495c", "#ffc9d2", "#ffffff"], kind: "shard", durMin: 540, durVar: 180 },
+              soul:   { count: 6, colors: ["#d9c2ff", "#a678e8", "#8b5fe0", "#f1eaff"], kind: "wisp",  durMin: 680, durVar: 220 }
+            }
+          }
+        };
+        function detectAnimProfileName() {
+          if (!window.matchMedia) return "desktop";
+          if (!window.matchMedia("(pointer: coarse)").matches) return "desktop";
+          var w = window.innerWidth || 0, h = window.innerHeight || 0;
+          var shortSide = Math.min(w, h);
+          var portrait = h >= w;
+          /* Phone-sized touch viewport: short side up to 540px in
+             portrait (or up to 480px in any orientation — a phone
+             held sideways). Tablets and touch laptops fall through
+             to the desktop profile. */
+          if (shortSide > 0 && shortSide <= 540 && (portrait || shortSide <= 480)) return "mobile";
+          return "desktop";
+        }
+        var animProfileName = "desktop";
+        var profile = ANIM_PROFILES.desktop;
+        function applyAnimProfile(name) {
+          animProfileName = name;
+          profile = ANIM_PROFILES[name] || ANIM_PROFILES.desktop;
+          document.documentElement.style.setProperty("--dm-clear-ms", profile.destroy + "ms");
+          document.documentElement.style.setProperty("--dm-pulse-ms", profile.pulseMs + "ms");
+        }
+        function refreshAnimProfile() { if (!busy) applyAnimProfile(detectAnimProfileName()); }
+        applyAnimProfile(detectAnimProfileName());
+        /* Read-only verification handle for the 1E.2M profile system. */
+        window.__dmAnim = {
+          profileName: function () { return animProfileName; },
+          detect: detectAnimProfileName,
+          current: function () { return profile; },
+          profiles: ANIM_PROFILES
+        };
+        function fallDuration(rows) { return Math.min(profile.fallMax, profile.fallBase + Math.max(1, rows) * profile.fallPerRow); }
         function randType() { return TYPE_LIST[Math.floor(Math.random() * TYPE_LIST.length)]; }
 
         /* ---- 1B.1 measurement cache ----
@@ -1904,7 +1988,7 @@
                    offsetWidth 64 times here, one layout per piece). */
                 var fromY = (r - ROWS) * stepPx;
                 var fromX = c * stepPx;
-                lastDropPromises.push(moveAnim(piece, fromX, fromY, 340, "cubic-bezier(.45,.05,.65,1)"));
+                lastDropPromises.push(moveAnim(piece, fromX, fromY, profile.dropIn, "cubic-bezier(.45,.05,.65,1)"));
               } else {
                 place(piece, 0);
               }
@@ -1928,15 +2012,14 @@
            short by a board update. Sword/Shield shards are metallic,
            Heart shards are red crystal, Soul produces violet wisps that
            drift upward and linger. Restrained counts (8–10 per piece). */
-        var FX_STYLE = {
-          sword:  { count: 9,  colors: ["#f0d488", "#e3ac3c", "#d9dce4", "#fff6d8"], kind: "shard", durMin: 340, durVar: 130 },
-          shield: { count: 9,  colors: ["#cfe4fa", "#5b9bd5", "#f2f7fd", "#aebfd2"], kind: "shard", durMin: 340, durVar: 130 },
-          heart:  { count: 10, colors: ["#ff8296", "#e0495c", "#ffc9d2", "#ffffff"], kind: "shard", durMin: 350, durVar: 140 },
-          soul:   { count: 8,  colors: ["#d9c2ff", "#a678e8", "#8b5fe0", "#f1eaff"], kind: "wisp",  durMin: 440, durVar: 170 }
-        };
+        /* 1E.2M: the per-type FX tables now live in ANIM_PROFILES
+           (fx) so each profile carries its own counts/durations; the
+           DESKTOP table above is the exact 1E.2 FX_STYLE. Sizes,
+           travel distance and glow radius scale from the profile
+           (desktop ×1 = the original rendering, byte for byte). */
         function spawnParticles(piece) {
           if (reducedMotion || !piece || !measure() || !piece.el.animate) return;
-          var fx = FX_STYLE[piece.type] || FX_STYLE.sword;
+          var fx = profile.fx[piece.type] || profile.fx.sword;
           var cx = piece.c * stepPx + cellPx / 2, cy = piece.r * stepPx + cellPx / 2;
           for (var i = 0; i < fx.count; i++) {
             var p = document.createElement("span");
@@ -1945,7 +2028,7 @@
             p.style.left = cx + "px";
             p.style.top = cy + "px";
             p.style.background = color;
-            p.style.boxShadow = "0 0 7px " + color;
+            p.style.boxShadow = "0 0 " + profile.glowPx + "px " + color;
             boardEl.appendChild(p);
             var durMs = fx.durMin + Math.random() * fx.durVar;
             var anim;
@@ -1953,12 +2036,12 @@
               /* Violet wisps: soft glowing orbs that swell and float
                  UP away from the board, fading late — visibly magical,
                  clearly distinct from the falling shards. */
-              var wsize = 6 + Math.random() * 6;
+              var wsize = (6 + Math.random() * 6) * profile.particleScale;
               p.style.width = wsize + "px";
               p.style.height = wsize + "px";
               p.style.margin = (-wsize / 2) + "px 0 0 " + (-wsize / 2) + "px";
               var wang = -Math.PI / 2 + (Math.random() - 0.5) * 1.7;
-              var wdist = cellPx * (0.45 + Math.random() * 0.55);
+              var wdist = cellPx * (0.45 + Math.random() * 0.55) * profile.travelScale;
               var wx = Math.cos(wang) * wdist, wy = Math.sin(wang) * wdist - cellPx * 0.28;
               anim = p.animate([
                 { transform: "translate3d(0,0,0) scale(0.7)", opacity: 0.95 },
@@ -1970,11 +2053,11 @@
                  burst outward, crest, then arc DOWN under gravity
                  while spinning — they stay near-full opacity until
                  late in the flight so the break reads clearly. */
-              p.style.width = (3 + Math.random() * 3) + "px";
-              p.style.height = (6 + Math.random() * 6) + "px";
+              p.style.width = (3 + Math.random() * 3) * profile.particleScale + "px";
+              p.style.height = (6 + Math.random() * 6) * profile.particleScale + "px";
               p.style.borderRadius = "1px";
               var ang = (Math.PI * 2 * i) / fx.count + Math.random() * 0.6;
-              var dist = cellPx * (0.6 + Math.random() * 0.5);
+              var dist = cellPx * (0.6 + Math.random() * 0.5) * profile.travelScale;
               var ex = Math.cos(ang) * dist, ey = Math.sin(ang) * dist * 0.7 + cellPx * 0.38;
               var rot = 120 + Math.random() * 200;
               anim = p.animate([
@@ -2013,6 +2096,10 @@
            piece — no jump back to the cell origin before animating. */
         async function attemptSwap(a, b, aFromPx, bFromPx) {
           if (busy || combat.gameOver || !grid[a.r][a.c] || !grid[b.r][b.c]) return;
+          /* 1E.2M: (re)select the presentation profile NOW and lock
+             it for the whole resolution sequence — refreshAnimProfile
+             is busy-guarded, so nothing can switch it mid-flight. */
+          applyAnimProfile(detectAnimProfileName());
           busy = true;
           setSelected(null);
           measure();
@@ -2023,8 +2110,8 @@
           /* Motion starts on the next frame after the tap/swipe — the
              pieces are persistent elements, they travel, never teleport. */
           await Promise.all([
-            pa0 ? moveAnim(pa0, aFrom.x, aFrom.y, ANIM.swap, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve(),
-            pb0 ? moveAnim(pb0, bFrom.x, bFrom.y, ANIM.swap, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve()
+            pa0 ? moveAnim(pa0, aFrom.x, aFrom.y, profile.swap, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve(),
+            pb0 ? moveAnim(pb0, bFrom.x, bFrom.y, profile.swap, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve()
           ]);
           if (Object.keys(findMatches()).length === 0) {
             /* invalid: fluid return with a restrained overshoot settle,
@@ -2034,8 +2121,8 @@
             var backFromB = { x: a.c * stepPx, y: a.r * stepPx };
             swapInGrid(b, a);
             await Promise.all([
-              pa0 ? moveAnim(pa0, backFromA.x, backFromA.y, ANIM.swapBack, "cubic-bezier(.34,1.35,.64,1)") : Promise.resolve(),
-              pb0 ? moveAnim(pb0, backFromB.x, backFromB.y, ANIM.swapBack, "cubic-bezier(.34,1.35,.64,1)") : Promise.resolve()
+              pa0 ? moveAnim(pa0, backFromA.x, backFromA.y, profile.swapBack, "cubic-bezier(.34,1.35,.64,1)") : Promise.resolve(),
+              pb0 ? moveAnim(pb0, backFromB.x, backFromB.y, profile.swapBack, "cubic-bezier(.34,1.35,.64,1)") : Promise.resolve()
             ]);
             busy = false;
             return;
@@ -2064,20 +2151,23 @@
                intersecting match is tallied exactly once. */
             if (totals) matched.forEach(function (p) { totals[p.type]++; });
             /* 1E.2 anticipation: the matched pieces brighten, pulse and
-               HOLD for 160ms with their artwork fully intact, so it is
-               unmistakable which pieces are about to break. */
+               HOLD (profile.matchHold — 160ms desktop / 280ms mobile)
+               with their artwork fully intact, so it is unmistakable
+               which pieces are about to break. */
             matched.forEach(function (p) { p.el.classList.add("matched"); });
-            await wait(ANIM.matchHold);
-            /* Destruction: the pieces shatter over 370ms (the CSS
-               piece-clear animation) while their type-specific particles
-               burst. Particles outlive the pieces — soul wisps run up
-               to ~610ms — because they are independent board nodes. */
+            await wait(profile.matchHold);
+            /* Destruction: the pieces shatter over profile.destroy
+               (the CSS piece-clear animation, whose duration the
+               profile sets via --dm-clear-ms) while their
+               type-specific particles burst. Particles outlive the
+               pieces — soul wisps run up to ~610ms on desktop —
+               because they are independent board nodes. */
             matched.forEach(function (p) {
               p.el.classList.remove("matched");
               p.el.classList.add("clearing");
               spawnParticles(p);
             });
-            await wait(ANIM.destroy);
+            await wait(profile.destroy);
             matched.forEach(function (p) {
               grid[p.r][p.c] = null;
               p.el.remove();
@@ -2085,10 +2175,11 @@
             /* Gravity + refill together, all at once — no stagger, no
                forced reflows, and the stage ends on animation.finished
                instead of a guessed duration + 40ms of dead time.
-               1E.2: falls run 272–400ms scaled by distance (fallDuration)
-               on an accelerating curve whose slight overshoot gives a
-               subtle landing settle — slow enough to follow individual
-               pieces, with no teleporting or abrupt replacement. */
+               1E.2: falls run scaled by distance (fallDuration —
+               272–400ms desktop, 354–500ms mobile) on an accelerating
+               curve whose slight overshoot gives a subtle landing
+               settle — slow enough to follow individual pieces, with
+               no teleporting or abrupt replacement. */
             measure();
             var moves = [];
             for (var c = 0; c < COLS; c++) {
@@ -2236,7 +2327,7 @@
             if (w && w !== lastW) { lastW = w; invalidateMeasure(); if (!busy) layoutAll(); }
           }).observe(boardEl);
         }
-        window.addEventListener("resize", function () { if (!busy) layoutAll(); });
+        window.addEventListener("resize", function () { refreshAnimProfile(); if (!busy) layoutAll(); });
 
         /* ===================================================
            Milestone 1C — basic combat state & turn sequence.
@@ -2808,6 +2899,7 @@
 
         document.getElementById("begin-btn").addEventListener("click", function () {
           var wasOver = combat.gameOver;
+          refreshAnimProfile(); /* 1E.2M: profile is (re)chosen at battle start */
           applyHeroToBattle();
           selectScreen.hidden = true;
           battleScreen.hidden = false;
