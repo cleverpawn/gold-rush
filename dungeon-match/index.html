@@ -924,18 +924,42 @@
       }
       .piece.selected img { transform: scale(1.09); filter: brightness(1.22) drop-shadow(0 4px 5px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 9px rgba(232, 200, 119, 0.65)); }
       .piece.clearing { z-index: 4; pointer-events: none; }
-      /* 1B.1: clear is transform + opacity only (compositor). Animating
-         filter: brightness() repainted every clearing piece each frame;
-         the bright highlight now comes from a brief scale pulse in the
-         first third, then a fast dissolve. Shorter: 280ms vs 380ms. */
-      .piece.clearing img { animation: piece-clear 280ms cubic-bezier(.3,.6,.4,1) forwards; }
-      @keyframes piece-clear {
-        0% { transform: scale(1); opacity: 1; }
-        30% { transform: scale(1.17); opacity: 1; }
-        100% { transform: scale(0.22) rotate(10deg); opacity: 0; }
+      /* Milestone 1E.2: match anticipation + visible destruction.
+         Matched pieces first brighten and pulse, then HOLD (~160ms,
+         artwork fully intact) so the player can see exactly what is
+         about to break; then they shatter over ~370ms in staged
+         scale/rotation steps — never an instant fade to zero. Every
+         cascade uses the SAME durations (the old 1B.1 cascade-2/3
+         speed-ups are removed). Per-type character — metallic shards,
+         crystal shards, soul wisps — comes from spawnParticles. */
+      .piece.sword { --fx: #e8c877; }
+      .piece.shield { --fx: #8fc1ee; }
+      .piece.heart { --fx: #ff8296; }
+      .piece.soul { --fx: #c9a8ff; }
+      .piece.matched { z-index: 5; pointer-events: none; filter: brightness(1.38) saturate(1.25); }
+      .piece.matched img { animation: piece-match-pulse 170ms ease-in-out forwards; }
+      @keyframes piece-match-pulse {
+        0% { transform: scale(1); }
+        55% { transform: scale(1.15); }
+        100% { transform: scale(1.09); }
       }
-      .piece.cascade-2.clearing img { animation-duration: 250ms; }
-      .piece.cascade-3.clearing img { animation-duration: 220ms; }
+      .piece.matched::after {
+        content: "";
+        position: absolute;
+        inset: -2px;
+        border: 2px solid var(--fx, #ffffff);
+        border-radius: 20%;
+        box-shadow: 0 0 14px var(--fx, #ffffff), inset 0 0 12px var(--fx, #ffffff);
+        pointer-events: none;
+      }
+      .piece.clearing img { animation: piece-clear 370ms cubic-bezier(.3,.6,.4,1) forwards; }
+      @keyframes piece-clear {
+        0% { transform: scale(1.09) rotate(0deg); opacity: 1; }
+        18% { transform: scale(1.17) rotate(-3deg); opacity: 1; }
+        45% { transform: scale(0.82) rotate(5deg); opacity: 0.95; }
+        75% { transform: scale(0.45) rotate(11deg); opacity: 0.55; }
+        100% { transform: scale(0.16) rotate(16deg); opacity: 0; }
+      }
       .fx-particle {
         position: absolute;
         width: 7px;
@@ -943,11 +967,14 @@
         margin: -3.5px 0 0 -3.5px;
         border-radius: 2px;
         pointer-events: none;
-        z-index: 6;
+        z-index: 14;
         will-change: transform, opacity;
       }
+      .fx-particle.wisp { border-radius: 50%; }
       @media (prefers-reduced-motion: reduce) {
         .piece.clearing img { animation-duration: 60ms; }
+        .piece.matched img { animation-duration: 60ms; }
+        .piece.matched { filter: none; }
         .piece.selected img { transform: none; }
         .piece.dragging img { transform: none; }
       }
@@ -1679,6 +1706,14 @@
           return new Promise(function (res) { setTimeout(res, reducedMotion ? Math.min(ms, 40) : ms); });
         }
         function dur(ms) { return reducedMotion ? 0 : ms; }
+        /* Milestone 1E.2 pacing (uniform for EVERY cascade — later
+           cascades are never rushed): swap stays snappy at 175ms out /
+           195ms back; a formed match pulses and holds 160ms before
+           destruction; destruction runs 370ms; falls and refills run
+           272–400ms scaled by distance. Reduced-motion collapses all
+           of these via wait()/dur() and the CSS media query. */
+        var ANIM = { swap: 175, swapBack: 195, matchHold: 160, destroy: 370 };
+        function fallDuration(rows) { return Math.min(400, 250 + Math.max(1, rows) * 22); }
         function randType() { return TYPE_LIST[Math.floor(Math.random() * TYPE_LIST.length)]; }
 
         /* ---- 1B.1 measurement cache ----
@@ -1868,7 +1903,7 @@
                    offsetWidth 64 times here, one layout per piece). */
                 var fromY = (r - ROWS) * stepPx;
                 var fromX = c * stepPx;
-                lastDropPromises.push(moveAnim(piece, fromX, fromY, 300, "cubic-bezier(.45,.05,.65,1)"));
+                lastDropPromises.push(moveAnim(piece, fromX, fromY, 340, "cubic-bezier(.45,.05,.65,1)"));
               } else {
                 place(piece, 0);
               }
@@ -1884,25 +1919,73 @@
           buildBoardFrom(generateTypes(), false);
         }
 
-        /* ---------- particles (restrained, board-contained) ---------- */
+        /* ---------- particles (1E.2: type-distinct destruction FX) ----------
+           Particles are board-level nodes, fully independent of the piece
+           elements: they keep animating after the piece itself is removed
+           and the grid state moves on, and each removes itself only when
+           its OWN animation finishes — the particle layer is never cut
+           short by a board update. Sword/Shield shards are metallic,
+           Heart shards are red crystal, Soul produces violet wisps that
+           drift upward and linger. Restrained counts (8–10 per piece). */
+        var FX_STYLE = {
+          sword:  { count: 9,  colors: ["#f0d488", "#e3ac3c", "#d9dce4", "#fff6d8"], kind: "shard", durMin: 340, durVar: 130 },
+          shield: { count: 9,  colors: ["#cfe4fa", "#5b9bd5", "#f2f7fd", "#aebfd2"], kind: "shard", durMin: 340, durVar: 130 },
+          heart:  { count: 10, colors: ["#ff8296", "#e0495c", "#ffc9d2", "#ffffff"], kind: "shard", durMin: 350, durVar: 140 },
+          soul:   { count: 8,  colors: ["#d9c2ff", "#a678e8", "#8b5fe0", "#f1eaff"], kind: "wisp",  durMin: 440, durVar: 170 }
+        };
         function spawnParticles(piece) {
           if (reducedMotion || !piece || !measure() || !piece.el.animate) return;
+          var fx = FX_STYLE[piece.type] || FX_STYLE.sword;
           var cx = piece.c * stepPx + cellPx / 2, cy = piece.r * stepPx + cellPx / 2;
-          for (var i = 0; i < 5; i++) {
+          for (var i = 0; i < fx.count; i++) {
             var p = document.createElement("span");
-            p.className = "fx-particle";
+            p.className = "fx-particle" + (fx.kind === "wisp" ? " wisp" : "");
+            var color = fx.colors[i % fx.colors.length];
             p.style.left = cx + "px";
             p.style.top = cy + "px";
-            p.style.background = TYPE_COLOR[piece.type];
-            p.style.boxShadow = "0 0 6px " + TYPE_COLOR[piece.type];
+            p.style.background = color;
+            p.style.boxShadow = "0 0 7px " + color;
             boardEl.appendChild(p);
-            var ang = (Math.PI * 2 * i) / 5 + Math.random() * 0.7;
-            var dist = cellPx * (0.55 + Math.random() * 0.45);
-            var anim = p.animate([
-              { transform: "translate3d(0,0,0) rotate(0deg)", opacity: 1 },
-              { transform: "translate3d(" + (Math.cos(ang) * dist) + "px," + (Math.sin(ang) * dist - cellPx * 0.18) + "px,0) rotate(140deg)", opacity: 0 }
-            ], { duration: 300 + Math.random() * 90, easing: "cubic-bezier(.2,.7,.3,1)" });
-            (function (node) { if (anim && anim.finished) anim.finished.then(function () { node.remove(); }, function () { node.remove(); }); else setTimeout(function () { node.remove(); }, 440); })(p);
+            var durMs = fx.durMin + Math.random() * fx.durVar;
+            var anim;
+            if (fx.kind === "wisp") {
+              /* Violet wisps: soft glowing orbs that swell and float
+                 UP away from the board, fading late — visibly magical,
+                 clearly distinct from the falling shards. */
+              var wsize = 6 + Math.random() * 6;
+              p.style.width = wsize + "px";
+              p.style.height = wsize + "px";
+              p.style.margin = (-wsize / 2) + "px 0 0 " + (-wsize / 2) + "px";
+              var wang = -Math.PI / 2 + (Math.random() - 0.5) * 1.7;
+              var wdist = cellPx * (0.45 + Math.random() * 0.55);
+              var wx = Math.cos(wang) * wdist, wy = Math.sin(wang) * wdist - cellPx * 0.28;
+              anim = p.animate([
+                { transform: "translate3d(0,0,0) scale(0.7)", opacity: 0.95 },
+                { transform: "translate3d(" + (wx * 0.6) + "px," + (wy * 0.6) + "px,0) scale(1.25)", opacity: 0.85, offset: 0.55 },
+                { transform: "translate3d(" + wx + "px," + wy + "px,0) scale(1.7)", opacity: 0 }
+              ], { duration: durMs, easing: "cubic-bezier(.25,.6,.35,1)" });
+            } else {
+              /* Metallic / crystal shards: elongated fragments that
+                 burst outward, crest, then arc DOWN under gravity
+                 while spinning — they stay near-full opacity until
+                 late in the flight so the break reads clearly. */
+              p.style.width = (3 + Math.random() * 3) + "px";
+              p.style.height = (6 + Math.random() * 6) + "px";
+              p.style.borderRadius = "1px";
+              var ang = (Math.PI * 2 * i) / fx.count + Math.random() * 0.6;
+              var dist = cellPx * (0.6 + Math.random() * 0.5);
+              var ex = Math.cos(ang) * dist, ey = Math.sin(ang) * dist * 0.7 + cellPx * 0.38;
+              var rot = 120 + Math.random() * 200;
+              anim = p.animate([
+                { transform: "translate3d(0,0,0) rotate(0deg)", opacity: 1 },
+                { transform: "translate3d(" + (ex * 0.7) + "px," + (ey * 0.45 - cellPx * 0.22) + "px,0) rotate(" + (rot * 0.6) + "deg)", opacity: 1, offset: 0.55 },
+                { transform: "translate3d(" + ex + "px," + ey + "px,0) rotate(" + rot + "deg)", opacity: 0 }
+              ], { duration: durMs, easing: "cubic-bezier(.25,.7,.35,1)" });
+            }
+            (function (node, a, d) {
+              if (a && a.finished) a.finished.then(function () { node.remove(); }, function () { node.remove(); });
+              else setTimeout(function () { node.remove(); }, d + 60);
+            })(p, anim, durMs);
           }
         }
 
@@ -1939,8 +2022,8 @@
           /* Motion starts on the next frame after the tap/swipe — the
              pieces are persistent elements, they travel, never teleport. */
           await Promise.all([
-            pa0 ? moveAnim(pa0, aFrom.x, aFrom.y, 175, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve(),
-            pb0 ? moveAnim(pb0, bFrom.x, bFrom.y, 175, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve()
+            pa0 ? moveAnim(pa0, aFrom.x, aFrom.y, ANIM.swap, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve(),
+            pb0 ? moveAnim(pb0, bFrom.x, bFrom.y, ANIM.swap, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve()
           ]);
           if (Object.keys(findMatches()).length === 0) {
             /* invalid: fluid return with a restrained overshoot settle,
@@ -1950,8 +2033,8 @@
             var backFromB = { x: a.c * stepPx, y: a.r * stepPx };
             swapInGrid(b, a);
             await Promise.all([
-              pa0 ? moveAnim(pa0, backFromA.x, backFromA.y, 195, "cubic-bezier(.34,1.35,.64,1)") : Promise.resolve(),
-              pb0 ? moveAnim(pb0, backFromB.x, backFromB.y, 195, "cubic-bezier(.34,1.35,.64,1)") : Promise.resolve()
+              pa0 ? moveAnim(pa0, backFromA.x, backFromA.y, ANIM.swapBack, "cubic-bezier(.34,1.35,.64,1)") : Promise.resolve(),
+              pb0 ? moveAnim(pb0, backFromB.x, backFromB.y, ANIM.swapBack, "cubic-bezier(.34,1.35,.64,1)") : Promise.resolve()
             ]);
             busy = false;
             return;
@@ -1979,13 +2062,21 @@
             /* findMatches returns a set of unique cells, so a tile in an
                intersecting match is tallied exactly once. */
             if (totals) matched.forEach(function (p) { totals[p.type]++; });
+            /* 1E.2 anticipation: the matched pieces brighten, pulse and
+               HOLD for 160ms with their artwork fully intact, so it is
+               unmistakable which pieces are about to break. */
+            matched.forEach(function (p) { p.el.classList.add("matched"); });
+            await wait(ANIM.matchHold);
+            /* Destruction: the pieces shatter over 370ms (the CSS
+               piece-clear animation) while their type-specific particles
+               burst. Particles outlive the pieces — soul wisps run up
+               to ~610ms — because they are independent board nodes. */
             matched.forEach(function (p) {
-              p.el.classList.add("clearing", "cascade-" + Math.min(cascade, 3));
+              p.el.classList.remove("matched");
+              p.el.classList.add("clearing");
               spawnParticles(p);
             });
-            /* 1B.1: clear stage is 280/250/220ms by cascade (was a fixed
-               395ms wait regardless). The wait now matches the CSS. */
-            await wait(cascade >= 3 ? 225 : (cascade === 2 ? 255 : 285));
+            await wait(ANIM.destroy);
             matched.forEach(function (p) {
               grid[p.r][p.c] = null;
               p.el.remove();
@@ -1993,8 +2084,10 @@
             /* Gravity + refill together, all at once — no stagger, no
                forced reflows, and the stage ends on animation.finished
                instead of a guessed duration + 40ms of dead time.
-               Falls accelerate (ease-in curve) with duration scaled to
-               distance: 1 row ≈ 150ms, capped at 325ms (was up to 430). */
+               1E.2: falls run 272–400ms scaled by distance (fallDuration)
+               on an accelerating curve whose slight overshoot gives a
+               subtle landing settle — slow enough to follow individual
+               pieces, with no teleporting or abrupt replacement. */
             measure();
             var moves = [];
             for (var c = 0; c < COLS; c++) {
@@ -2008,8 +2101,8 @@
                   grid[piece.r][c] = null;
                   piece.r = write;
                   grid[write][c] = piece;
-                  var fallMs = Math.min(325, 110 + distRows * 55);
-                  moves.push(moveAnim(piece, fromX, fromY, fallMs, "cubic-bezier(.5,.05,.7,.5)"));
+                  var fallMs = fallDuration(distRows);
+                  moves.push(moveAnim(piece, fromX, fromY, fallMs, "cubic-bezier(.5,.05,.6,1.08)"));
                 }
                 write--;
               }
@@ -2021,8 +2114,8 @@
                 var sFromX = c * stepPx, sFromY = spawnR * stepPx;
                 np.r = r;
                 grid[r][c] = np;
-                var refillMs = Math.min(325, 125 + empty * 50);
-                moves.push(moveAnim(np, sFromX, sFromY, refillMs, "cubic-bezier(.5,.05,.7,.5)"));
+                var refillMs = fallDuration(empty);
+                moves.push(moveAnim(np, sFromX, sFromY, refillMs, "cubic-bezier(.5,.05,.6,1.08)"));
               }
             }
             if (moves.length) await Promise.all(moves);
