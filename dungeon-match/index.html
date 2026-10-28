@@ -971,6 +971,77 @@
         will-change: transform, opacity;
       }
       .fx-particle.wisp { border-radius: 50%; }
+
+      /* Milestone 1E.3: HEART CRYSTAL SHATTER (Heart tiles only).
+         The fragments are not decorative particles: each shard is a
+         polygon-clipped copy of the ACTUAL Heart artwork, and the seven
+         polygons tile the piece's silhouette, so the crystal the player
+         saw is literally the thing that breaks apart. Shards live in a
+         board-level .heart-shatter layer (z-index above the pieces) and
+         remove themselves only when their own flight ends — the logical
+         board, gravity and refill proceed underneath them. */
+      .heart-shatter {
+        position: absolute;
+        pointer-events: none;
+        z-index: 16;
+      }
+      .heart-shard {
+        position: absolute;
+        inset: 0;
+        will-change: transform, opacity;
+        overflow: hidden;
+      }
+      .heart-shard img {
+        position: absolute;
+        left: 2%;
+        top: 2%;
+        width: 96%;
+        height: 96%;
+        object-fit: contain;
+        display: block;
+        pointer-events: none;
+      }
+      /* facet shading: a light-to-dark sweep inside each clipped shard
+         so fragments read as angled ruby faces, not flat image slices */
+      .heart-shard::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(var(--fa, 120deg), rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0) 46%, rgba(74, 0, 14, 0.34) 88%);
+        pointer-events: none;
+      }
+      .heart-sparkle {
+        position: absolute;
+        border-radius: 1px;
+        background: linear-gradient(135deg, #ffffff, #ffb3c0 55%, #e0495c);
+        box-shadow: 0 0 6px rgba(255, 130, 150, 0.9);
+        will-change: transform, opacity;
+        pointer-events: none;
+      }
+      /* Fracture stage: jagged cracks spread over the intact crystal
+         (an SVG overlay appended to the piece) while it shudders —
+         the artwork itself is still fully visible underneath. */
+      .heart-cracks {
+        position: absolute;
+        inset: 0;
+        z-index: 6;
+        pointer-events: none;
+        animation: heart-crack-in 180ms ease-out forwards;
+      }
+      @keyframes heart-crack-in {
+        0% { opacity: 0; transform: scale(0.86); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      .piece.heart.fracturing img { animation: heart-shudder 180ms ease-in-out; }
+      @keyframes heart-shudder {
+        0%, 100% { transform: scale(1.09) translate(0, 0); }
+        30% { transform: scale(1.1) translate(0.6px, -0.4px); }
+        65% { transform: scale(1.08) translate(-0.6px, 0.4px); }
+      }
+      /* The instant the shards spawn, the source piece's own image is
+         gone — replaced by the fragments, never shown alongside them
+         and never faded out as a whole. */
+      .piece.heart-shattered img { opacity: 0 !important; animation: none !important; }
       @media (prefers-reduced-motion: reduce) {
         .piece.clearing img { animation-duration: 60ms; }
         .piece.matched img { animation-duration: 60ms; }
@@ -1713,6 +1784,10 @@
            272–400ms scaled by distance. Reduced-motion collapses all
            of these via wait()/dur() and the CSS media query. */
         var ANIM = { swap: 175, swapBack: 195, matchHold: 160, destroy: 370 };
+        /* 1E.3: Heart-only fracture stage between the hold and the
+           shatter — cracks spread over the intact crystal for ~180ms
+           before it breaks. Other tile types are untouched. */
+        var HEART_FRACTURE_MS = 180;
         function fallDuration(rows) { return Math.min(400, 250 + Math.max(1, rows) * 22); }
         function randType() { return TYPE_LIST[Math.floor(Math.random() * TYPE_LIST.length)]; }
 
@@ -1935,6 +2010,9 @@
         };
         function spawnParticles(piece) {
           if (reducedMotion || !piece || !measure() || !piece.el.animate) return;
+          /* 1E.3: Hearts never use the generic particle burst any more —
+             spawnHeartShatter below replaces the crystal itself. */
+          if (piece.type === "heart") return;
           var fx = FX_STYLE[piece.type] || FX_STYLE.sword;
           var cx = piece.c * stepPx + cellPx / 2, cy = piece.r * stepPx + cellPx / 2;
           for (var i = 0; i < fx.count; i++) {
@@ -1987,6 +2065,118 @@
               else setTimeout(function () { node.remove(); }, d + 60);
             })(p, anim, durMs);
           }
+        }
+
+        /* ---------- Milestone 1E.3: Heart crystal fracture + shatter ----------
+           Fracture: an SVG of jagged cracks (centre 50,46 in a 100-unit
+           viewBox, matching the fan centre the shards pivot from) is
+           laid over the still-intact Heart while it shudders.
+           Shatter: seven shards, each a polygon-clipped copy of the
+           real Heart artwork. The polygons form a fan from the crystal's
+           centre to its perimeter, so together they ARE the silhouette;
+           each then flies radially outward from its own centroid with
+           rotation and a gravity drop, fading only late in flight.
+           Four tiny diamond sparkles trail the break. The layer is a
+           board-level node: it outlives the piece element and the
+           logical board update, and removes itself when the longest
+           shard flight ends. */
+        var HEART_CENTER = { x: 50, y: 46 };
+        var HEART_PERIMETER = [[0, 14], [26, 0], [58, 0], [100, 16], [96, 60], [52, 100], [6, 62]];
+        var HEART_CRACK_PATHS = [
+          "M50 46 L40 32 L31 19 L27 6",
+          "M50 46 L61 29 L69 15 L74 3",
+          "M50 46 L72 42 L86 39 L97 33",
+          "M50 46 L63 63 L70 80 L74 94",
+          "M50 46 L47 68 L49 86 L52 99",
+          "M50 46 L35 61 L26 76 L19 90",
+          "M50 46 L28 47 L14 43 L3 38",
+          "M50 46 L44 24 L46 10"
+        ];
+        function addHeartCracks(piece) {
+          if (!piece || !piece.el || piece.el.querySelector(".heart-cracks")) return;
+          var svgNS = "http://www.w3.org/2000/svg";
+          var svg = document.createElementNS(svgNS, "svg");
+          svg.setAttribute("class", "heart-cracks");
+          svg.setAttribute("viewBox", "0 0 100 100");
+          svg.setAttribute("aria-hidden", "true");
+          HEART_CRACK_PATHS.forEach(function (d) {
+            var p = document.createElementNS(svgNS, "path");
+            p.setAttribute("d", d);
+            p.setAttribute("fill", "none");
+            p.setAttribute("stroke", "rgba(255,236,238,0.95)");
+            p.setAttribute("stroke-width", "1.6");
+            p.setAttribute("stroke-linecap", "round");
+            p.setAttribute("style", "filter: drop-shadow(0 0 1px rgba(120,0,18,0.9))");
+            svg.appendChild(p);
+          });
+          piece.el.appendChild(svg);
+          piece.el.classList.add("fracturing");
+        }
+        function spawnHeartShatter(piece) {
+          if (reducedMotion || !piece || !measure() || !piece.el.animate) return;
+          var layer = document.createElement("div");
+          layer.className = "heart-shatter";
+          layer.style.left = (piece.c * stepPx) + "px";
+          layer.style.top = (piece.r * stepPx) + "px";
+          layer.style.width = cellPx + "px";
+          layer.style.height = cellPx + "px";
+          boardEl.appendChild(layer);
+          var flights = [];
+          HEART_PERIMETER.forEach(function (pt, i) {
+            var next = HEART_PERIMETER[(i + 1) % HEART_PERIMETER.length];
+            var poly = [HEART_CENTER, pt, next];
+            var cxp = (HEART_CENTER.x + pt[0] + next[0]) / 3;
+            var cyp = (HEART_CENTER.y + pt[1] + next[1]) / 3;
+            var shard = document.createElement("div");
+            shard.className = "heart-shard";
+            shard.style.clipPath = "polygon(" + poly.map(function (q) { return q[0] + "% " + q[1] + "%"; }).join(", ") + ")";
+            shard.style.setProperty("--fa", (100 + i * 47) + "deg");
+            var img = document.createElement("img");
+            img.src = srcMap.heart;
+            img.alt = "";
+            img.draggable = false;
+            /* each fragment catches the light differently, like a real
+               broken facet — some faces flash bright, some go deep red */
+            img.style.filter = "brightness(" + (0.8 + (i % 4) * 0.14).toFixed(2) + ") saturate(1.18) drop-shadow(0 2px 2px rgba(0,0,0,0.45))";
+            shard.appendChild(img);
+            layer.appendChild(shard);
+            var vx = (cxp - HEART_CENTER.x) / 50, vy = (cyp - HEART_CENTER.y) / 50;
+            var dist = cellPx * (0.5 + (i % 3) * 0.16 + Math.random() * 0.14);
+            var dx = vx * dist * 1.35;
+            var dy = vy * dist * 0.8 + cellPx * 0.46; /* gravity wins: shards arc down */
+            var rot = (vx >= 0 ? 1 : -1) * (46 + Math.random() * 88);
+            var durMs = 600 + Math.random() * 150;
+            var anim = shard.animate([
+              { transform: "translate3d(0,0,0) rotate(0deg)", opacity: 1 },
+              { transform: "translate3d(" + (dx * 0.34) + "px," + (dy * 0.22 - cellPx * 0.07) + "px,0) rotate(" + (rot * 0.3) + "deg)", opacity: 1, offset: 0.3 },
+              { transform: "translate3d(" + (dx * 0.78) + "px," + (dy * 0.68) + "px,0) rotate(" + (rot * 0.72) + "deg)", opacity: 0.92, offset: 0.72 },
+              { transform: "translate3d(" + dx + "px," + dy + "px,0) rotate(" + rot + "deg)", opacity: 0 }
+            ], { duration: durMs, easing: "cubic-bezier(.22,.68,.36,1)", fill: "forwards" });
+            flights.push(anim && anim.finished ? anim.finished.catch(function () {}) : wait(durMs));
+          });
+          /* a few small sparkling fragments linger briefly at the break */
+          for (var s = 0; s < 4; s++) {
+            var sp = document.createElement("span");
+            sp.className = "heart-sparkle";
+            var sz = 3 + Math.random() * 2.5;
+            sp.style.width = sz + "px";
+            sp.style.height = sz + "px";
+            sp.style.left = (38 + Math.random() * 24) + "%";
+            sp.style.top = (34 + Math.random() * 24) + "%";
+            layer.appendChild(sp);
+            var sang = Math.random() * Math.PI * 2;
+            var sdist = cellPx * (0.3 + Math.random() * 0.35);
+            var sx = Math.cos(sang) * sdist, sy = Math.sin(sang) * sdist * 0.6 + cellPx * 0.2;
+            var sAnim = sp.animate([
+              { transform: "translate3d(0,0,0) rotate(45deg) scale(1)", opacity: 1 },
+              { transform: "translate3d(" + (sx * 0.6) + "px," + (sy * 0.6 - cellPx * 0.1) + "px,0) rotate(140deg) scale(0.9)", opacity: 0.95, offset: 0.55 },
+              { transform: "translate3d(" + sx + "px," + sy + "px,0) rotate(225deg) scale(0.55)", opacity: 0 }
+            ], { duration: 540 + Math.random() * 200, easing: "cubic-bezier(.25,.65,.35,1)", fill: "forwards" });
+            flights.push(sAnim && sAnim.finished ? sAnim.finished.catch(function () {}) : wait(700));
+          }
+          Promise.all(flights).then(function () { layer.remove(); });
+          /* hard fallback: the layer can never get stuck on the board */
+          setTimeout(function () { layer.remove(); }, 1100);
         }
 
         /* ---------- selection ---------- */
@@ -2067,14 +2257,31 @@
                unmistakable which pieces are about to break. */
             matched.forEach(function (p) { p.el.classList.add("matched"); });
             await wait(ANIM.matchHold);
+            /* 1E.3 FRACTURE (Hearts only): cracks spread across the
+               intact crystal and it shudders before breaking. Other
+               types simply hold a beat longer in a mixed match. */
+            var heartMatched = matched.filter(function (p) { return p.type === "heart"; });
+            if (heartMatched.length && !reducedMotion) {
+              heartMatched.forEach(addHeartCracks);
+              await wait(HEART_FRACTURE_MS);
+            }
             /* Destruction: the pieces shatter over 370ms (the CSS
                piece-clear animation) while their type-specific particles
                burst. Particles outlive the pieces — soul wisps run up
-               to ~610ms — because they are independent board nodes. */
+               to ~610ms — because they are independent board nodes.
+               1E.3: a Heart does NOT fade/scale away and gets no generic
+               particles — its artwork is replaced in the same frame by
+               the clipped-artwork shards of spawnHeartShatter, whose
+               flight (~600–750ms) continues over the falling board. */
             matched.forEach(function (p) {
               p.el.classList.remove("matched");
-              p.el.classList.add("clearing");
-              spawnParticles(p);
+              if (p.type === "heart" && !reducedMotion) {
+                p.el.classList.add("heart-shattered");
+                spawnHeartShatter(p);
+              } else {
+                p.el.classList.add("clearing");
+                spawnParticles(p);
+              }
             });
             await wait(ANIM.destroy);
             matched.forEach(function (p) {
@@ -2761,6 +2968,47 @@
             });
             return inst ? selectTarget(inst.uid) : false;
           }
+        };
+
+        /* Milestone 1E.3 deterministic test handle (dev-only, console):
+           stages a board with a GUARANTEED Heart match — Hearts sit at
+           row 5 (1-indexed) columns 2, 3 and 5, with a fourth Heart
+           directly above column 4; swapping that Heart down completes
+           a 4-Heart match. No player-facing control is added. */
+        window.__dmTest = {
+          stageHeartMatch: function () {
+            if (busy || combat.gameOver) return null;
+            for (var attempt = 0; attempt < 200; attempt++) {
+              var t = generateTypes();
+              t[4][1] = "heart"; t[4][2] = "heart"; t[4][4] = "heart"; t[3][3] = "heart";
+              var fillers = ["sword", "shield", "soul"];
+              for (var f = 0; f < fillers.length; f++) {
+                t[4][3] = fillers[f];
+                if (!Object.keys(findMatchesIn(t)).length) {
+                  buildBoardFrom(t, false);
+                  setSelected(null);
+                  return { from: { r: 3, c: 3 }, to: { r: 4, c: 3 } };
+                }
+              }
+            }
+            return null;
+          },
+          performHeartMatch: function () {
+            var staged = window.__dmTest.stageHeartMatch();
+            if (!staged) return Promise.resolve(false);
+            return attemptSwap(staged.from, staged.to).then(function () { return true; });
+          },
+          fxCounts: function () {
+            return {
+              shatterLayers: document.querySelectorAll(".heart-shatter").length,
+              shards: document.querySelectorAll(".heart-shard").length,
+              sparkles: document.querySelectorAll(".heart-sparkle").length,
+              cracks: document.querySelectorAll(".heart-cracks").length,
+              genericParticles: document.querySelectorAll(".fx-particle").length,
+              pieces: document.querySelectorAll(".piece").length
+            };
+          },
+          boardTypes: function () { return gridTypes(); }
         };
 
         /* ---------- screen switching + champion pick ---------- */
