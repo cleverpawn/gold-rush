@@ -556,7 +556,7 @@
 
       .battle-grid {
         display: grid;
-        grid-template-columns: 264px minmax(0, 1fr) 264px;
+        grid-template-columns: 240px minmax(0, 1fr) 240px;
         gap: 16px;
         align-items: center;
         flex: 1;
@@ -572,7 +572,7 @@
       .combatant .portrait-lg {
         display: block;
         width: 100%;
-        height: clamp(104px, 25dvh, 228px);
+        height: clamp(96px, 22dvh, 196px);
         object-fit: cover;
         object-position: center 20%;
         border-radius: 7px;
@@ -896,7 +896,7 @@
            Width = the smaller of the centre column and the height left
            after the topbar, legend and turn feedback are taken out of
            the actual visible height (--app-h). */
-        width: min(100%, calc(var(--app-h, 100dvh) - 232px), 716px);
+        width: min(100%, calc(var(--app-h, 100dvh) - 198px), 704px);
         aspect-ratio: 1 / 1;
         flex: none;
         margin: 0 auto;
@@ -1105,7 +1105,7 @@
       }
 
       .legend {
-        width: min(100%, calc(var(--app-h, 100dvh) - 232px), 716px);
+        width: min(100%, calc(var(--app-h, 100dvh) - 198px), 704px);
         margin: 10px auto 0;
         display: flex;
         flex-wrap: wrap;
@@ -1139,7 +1139,7 @@
          never blocks input (the strip is outside the board), and adds no
          permanent panel. Empty state is a one-line prompt. */
       .turn-feedback {
-        width: min(100%, calc(var(--app-h, 100dvh) - 232px), 716px);
+        width: min(100%, calc(var(--app-h, 100dvh) - 198px), 704px);
         margin: 8px auto 0;
         padding: 6px 12px;
         flex: none;
@@ -1180,9 +1180,9 @@
          comes from 100dvh (see .board-frame), and the breakpoints below
          compact the chrome further as the viewport gets shorter. */
       @media (max-width: 1080px) {
-        .battle-grid { grid-template-columns: 224px minmax(0, 1fr) 224px; gap: 12px; }
+        .battle-grid { grid-template-columns: 204px minmax(0, 1fr) 204px; gap: 12px; }
         .combatant { padding: 12px; }
-        .combatant .portrait-lg { height: clamp(88px, 22dvh, 180px); }
+        .combatant .portrait-lg { height: clamp(84px, 20dvh, 168px); }
       }
 
       /* Short desktop windows (e.g. 1366x768): tighten everything */
@@ -1199,9 +1199,9 @@
         .intent .intent-text { font-size: 0.92rem; }
         .stat-row { margin-top: 8px; }
         .soul-burst-btn { margin-top: 9px; padding: 9px 10px; font-size: 0.94rem; }
-        .board-frame { width: min(100%, calc(var(--app-h, 100dvh) - 204px), 716px); }
-        .legend { width: min(100%, calc(var(--app-h, 100dvh) - 204px), 716px); margin-top: 8px; padding: 6px 12px; }
-        .turn-feedback { width: min(100%, calc(var(--app-h, 100dvh) - 204px), 716px); }
+        .board-frame { width: min(100%, calc(var(--app-h, 100dvh) - 186px), 704px); }
+        .legend { width: min(100%, calc(var(--app-h, 100dvh) - 186px), 704px); margin-top: 8px; padding: 6px 12px; }
+        .turn-feedback { width: min(100%, calc(var(--app-h, 100dvh) - 186px), 704px); }
       }
       @media (max-height: 680px) and (min-width: 701px) {
         .combatant .portrait-lg { height: 76px; object-position: center 16%; }
@@ -1258,7 +1258,7 @@
         #screen-battle {
           padding: calc(10px + env(safe-area-inset-top, 0px)) calc(10px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) calc(10px + env(safe-area-inset-left, 0px));
         }
-        .battle-topbar { margin-bottom: 8px; gap: 8px; flex-wrap: nowrap; }
+        .battle-topbar { margin-bottom: 6px; gap: 8px; flex-wrap: nowrap; }
         .location-name { font-size: 1.12rem; letter-spacing: 0.06em; }
         .location-sub { font-size: 0.66rem; letter-spacing: 0.18em; }
         .back-btn { padding: 7px 10px; font-size: 0.68rem; letter-spacing: 0.08em; white-space: nowrap; }
@@ -1266,7 +1266,7 @@
         .battle-grid {
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          gap: 6px;
           align-items: stretch;
         }
         /* 1E overlap fix: the board column used to centre its contents
@@ -1290,7 +1290,7 @@
            Fallback (older engines): --app-h reserve calc. */
         .board-col { container-type: size; }
         .board-frame {
-          width: min(100%, calc(var(--app-h, 100dvh) - 452px));
+          width: min(100%, calc(var(--app-h, 100dvh) - 428px), 404px);
           padding: 7px;
         }
         /* Legend spans the full column width (not the board's width):
@@ -1299,8 +1299,8 @@
            panel. One line, full width, always. */
         .legend {
           width: 100%;
-          margin-top: 7px;
-          padding: 6px 10px;
+          margin-top: 5px;
+          padding: 4px 8px;
           gap: 4px 13px;
         }
         /* Feedback spans the full column width like the legend — at
@@ -1312,13 +1312,13 @@
           padding: 5px 9px;
           font-size: 0.78rem;
           line-height: 1.32;
-          min-height: 46px;
+          min-height: 34px;
         }
         /* Tall phones: siblings are legend ~43 + feedback ~52 = ~95px.
            (Short phones override this reserve to 78px in the max-height
            block below, where both strips are compressed.) */
         @supports (width: 100cqw) {
-          .board-frame { width: min(100cqw, calc(100cqh - 97px)); }
+          .board-frame { width: min(100cqw, calc(100cqh - 84px), 404px); }
         }
         .legend-item { font-size: 0.8rem; gap: 6px; }
         .legend-item > span:last-child { font-size: 0; }
@@ -1329,16 +1329,16 @@
         /* compact combatant panels: thumbnail portrait + stats grid */
         .combatant {
           display: grid;
-          grid-template-columns: 52px minmax(0, 1fr) auto;
+          grid-template-columns: 44px minmax(0, 1fr) auto;
           column-gap: 10px;
           row-gap: 3px;
           align-items: center;
-          padding: 9px 11px;
+          padding: 7px 10px;
           flex: none;
         }
         .combatant .portrait-lg {
-          width: 52px;
-          height: 52px;
+          width: 44px;
+          height: 44px;
           grid-column: 1;
           grid-row: 1 / span 2;
           border-radius: 6px;
@@ -1351,8 +1351,8 @@
         .combatant .hp-bar { grid-column: 1 / -1; height: 9px; margin-top: 3px; }
         .enemy-panel .intent {
           grid-column: 1 / -1;
-          margin-top: 4px;
-          padding: 6px 9px;
+          margin-top: 3px;
+          padding: 4px 8px;
           gap: 8px;
         }
         .enemy-panel .intent svg { width: 17px; height: 17px; }
@@ -1382,7 +1382,7 @@
 
         .player-panel .stat-row {
           grid-column: 1 / -1;
-          margin-top: 4px;
+          margin-top: 3px;
           gap: 8px;
           flex-wrap: nowrap;
         }
@@ -1414,7 +1414,7 @@
         .player-panel.gold-active #block-box { flex: 0.82 1 0; }
         .player-panel.gold-active #soul-box { flex: 1.38 1 0; }
         .player-panel.gold-active #gold-box { flex: 0.95 1 0; }
-        .player-panel .stat-box { padding: 5px 9px; gap: 7px; }
+        .player-panel .stat-box { padding: 4px 8px; gap: 6px; }
         /* 1E: label + value must stay on ONE line — wrapping the Soul
            Charge box to two lines was inflating the player panel and
            pushing Soul Burst off the bottom of short screens. */
@@ -1427,8 +1427,8 @@
         .player-panel .soul-pips { display: none; }
         .player-panel .soul-burst-btn {
           grid-column: 1 / -1;
-          margin-top: 5px;
-          padding: 9px 10px;
+          margin-top: 4px;
+          padding: 7px 10px;
           font-size: 0.92rem;
         }
         .player-panel .soul-burst-cost { display: none; }
@@ -1444,13 +1444,13 @@
         .battle-topbar { flex-wrap: nowrap; margin-bottom: 6px; }
         .battle-grid { gap: 6px; }
         .location-name { font-size: 1rem; letter-spacing: 0.05em; white-space: nowrap; }
-        .location-sub { font-size: 0.6rem; white-space: nowrap; }
+        .location-sub { display: none; }
         .location-block { overflow: hidden; }
         .location-name, .location-sub { overflow: hidden; text-overflow: ellipsis; }
         .back-btn { font-size: 0.62rem; padding: 6px 8px; }
-        .board-frame { width: min(100%, calc(var(--app-h, 100dvh) - 452px)); }
+        .board-frame { width: min(100%, calc(var(--app-h, 100dvh) - 428px), 404px); }
         @supports (width: 100cqw) {
-          .board-frame { width: min(100cqw, calc(100cqh - 70px)); }
+          .board-frame { width: min(100cqw, calc(100cqh - 68px), 404px); }
         }
         /* 1E.1 board-preservation pass: at short heights the PANELS pay
            for the feedback strip, not the board — smaller portraits,
@@ -1472,19 +1472,19 @@
         .legend-item .mini { width: 18px; height: 18px; }
         .legend-item .mini img { width: 18px; height: 18px; }
         .player-panel .stat-row { margin-top: 2px; }
-        .player-panel .stat-box { padding: 4px 8px; }
+        .player-panel .stat-box { padding: 3px 8px; }
         .player-panel .soul-burst-btn { margin-top: 3px; padding: 4px 10px; }
         /* 1E: legend stays on ONE line at this size — wrapping to two
            lines was part of what pushed it under the player panel. */
         .legend { width: 100%; margin-top: 5px; padding: 4px 10px; flex-wrap: nowrap; gap: 4px 10px; }
-        .combatant { padding: 6px 10px; }
+        .combatant { padding: 5px 10px; }
         .combatant .portrait-lg { width: 40px; height: 40px; }
-        .enemy-panel .intent { padding: 4px 8px; }
+        .enemy-panel .intent { padding: 3px 8px; }
         .enemy-panel .intent .intent-label { display: none; }
         .enemy-panel .enemy-roster { margin-top: 2px; padding-top: 4px; }
         .enemy-panel .roster-chip { min-height: 32px; padding: 2px 6px; }
         .enemy-panel .chip-main { gap: 2px; }
-        .player-panel .soul-burst-btn { padding: 6px 10px; }
+        .player-panel .soul-burst-btn { padding: 5px 10px; }
       }
 
       /* 1E.1: very short VISIBLE viewports (e.g. Safari with both bars
@@ -1527,6 +1527,127 @@
         .begin-wrap { margin-top: 8px; margin-bottom: 8px; }
         .begin-btn { padding: 11px 14px; }
         .encounter-dev { padding: 7px 12px 8px; }
+      }
+
+      /* ===================================================
+         Milestone 1H — TABLET PORTRAIT (701–940px wide, portrait):
+         dedicated board-first arrangement, NOT the squeezed desktop
+         three-column layout. Enemy and hero become compact horizontal
+         bars side by side in one row; the board column spans the full
+         width beneath them and the board is sized from its WIDTH
+         first (capped at 672px), with the height reserve only
+         guarding the no-scroll fit — the priority inversion of 1H.
+         The selection screen is untouched by this block.
+         =================================================== */
+      @media (min-width: 701px) and (max-width: 940px) and (orientation: portrait) {
+        #screen-battle {
+          padding: calc(12px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+        }
+        .battle-topbar { margin-bottom: 8px; gap: 10px; flex-wrap: nowrap; }
+        .location-name { font-size: 1.35rem; }
+        .location-sub { font-size: 0.74rem; }
+        .back-btn { padding: 8px 13px; font-size: 0.78rem; white-space: nowrap; }
+
+        .battle-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          grid-template-rows: auto minmax(0, 1fr);
+          grid-template-areas: "enemy player" "board board";
+          gap: 10px;
+          align-items: stretch;
+        }
+        .enemy-panel { grid-area: enemy; }
+        .player-panel { grid-area: player; }
+        .board-col {
+          grid-area: board;
+          container-type: size;
+          min-height: 0;
+          justify-content: flex-start;
+        }
+        .board-frame {
+          width: min(94%, calc(var(--app-h, 100dvh) - 430px), 672px);
+          padding: 9px;
+        }
+        @supports (width: 100cqw) {
+          .board-frame { width: min(100cqw, calc(100cqh - 96px), 672px); }
+        }
+        .legend { width: 100%; margin-top: 7px; padding: 6px 12px; gap: 5px 16px; }
+        .legend-item { font-size: 0.88rem; }
+        .turn-feedback { width: 100%; margin-top: 6px; min-height: 36px; font-size: 0.85rem; padding: 5px 10px; }
+
+        /* compact combatant bars (same grid pattern as phones, roomier) */
+        .combatant {
+          display: grid;
+          grid-template-columns: 56px minmax(0, 1fr) auto;
+          column-gap: 10px;
+          row-gap: 3px;
+          align-items: center;
+          padding: 9px 12px;
+        }
+        .combatant .portrait-lg {
+          width: 56px;
+          height: 56px;
+          grid-column: 1;
+          grid-row: 1 / span 2;
+          border-radius: 6px;
+        }
+        .combatant-name { grid-column: 2; grid-row: 1; margin: 0; font-size: 1.05rem; line-height: 1.15; }
+        .combatant-title { grid-column: 2; grid-row: 2; margin: 0; font-size: 0.62rem; }
+        .combatant .hp-row { grid-column: 3; grid-row: 1 / span 2; margin: 0; align-self: center; }
+        .combatant .hp-value { font-size: 1rem; }
+        .combatant .hp-label { display: none; }
+        .combatant .hp-bar { grid-column: 1 / -1; height: 9px; margin-top: 3px; }
+        .target-tag { display: none; }
+        .enemy-panel .intent {
+          grid-column: 1 / -1;
+          margin-top: 4px;
+          padding: 5px 9px;
+          gap: 8px;
+        }
+        .enemy-panel .intent svg { width: 18px; height: 18px; }
+        .enemy-panel .intent .intent-text { font-size: 0.9rem; }
+        .enemy-panel .intent .intent-label { font-size: 0.58rem; }
+        .enemy-panel .enemy-roster {
+          grid-column: 1 / -1;
+          margin-top: 4px;
+          padding-top: 6px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .enemy-panel .roster-head { flex-direction: column; gap: 0; margin-bottom: 0; flex: none; }
+        .enemy-panel .roster-count { font-size: 0.7rem; white-space: nowrap; }
+        .enemy-panel .roster-row { flex: 1; min-width: 0; }
+        .enemy-panel .roster-chip { padding: 4px 6px; gap: 6px; min-height: 38px; flex: 1 1 0; min-width: 0; }
+        .enemy-panel .roster-chip img { width: 24px; height: 24px; }
+
+        .player-panel .stat-row {
+          grid-column: 1 / -1;
+          margin-top: 4px;
+          gap: 6px;
+          flex-wrap: nowrap;
+        }
+        .player-panel .stat-box { padding: 5px 7px; gap: 6px; min-width: 0; }
+        .player-panel .stat-box > span { display: flex; align-items: baseline; gap: 5px; flex-wrap: nowrap; }
+        .player-panel .stat-box .stat-label { white-space: nowrap; display: inline; font-size: 0.58rem; letter-spacing: 0.06em; }
+        .player-panel .stat-box .stat-value { white-space: nowrap; font-size: 0.95rem; }
+        .player-panel .stat-box svg { width: 15px; height: 15px; }
+        .player-panel #gold-box { flex: 1 1 0; }
+        .player-panel .gold-coin-icon { width: 15px; height: 15px; }
+        /* Gold battles: horizontal tightening ONLY (same rule as phones)
+           so the chip never changes the panel height or the board. */
+        .player-panel.gold-active .stat-box { padding-left: 4px; padding-right: 4px; gap: 4px; }
+        .player-panel.gold-active #block-box { flex: 0.82 1 0; }
+        .player-panel.gold-active #soul-box { flex: 1.38 1 0; }
+        .player-panel.gold-active #gold-box { flex: 0.95 1 0; }
+        .player-panel .soul-pips { display: none; }
+        .player-panel .soul-burst-btn {
+          grid-column: 1 / -1;
+          margin-top: 5px;
+          padding: 8px 10px;
+          font-size: 0.92rem;
+        }
+        .player-panel .soul-burst-cost { display: none; }
       }
     </style>
   </head>
