@@ -1060,6 +1060,31 @@
       }
       .fx-particle.wisp { border-radius: 50%; }
 
+      /* Milestone 1G.2 — MOBILE paint optimization. Every rule in this
+         block is scoped to html[data-dm-profile="mobile"], an attribute
+         applyAnimProfile sets from the ACTIVE profile, so the desktop
+         rules above remain literally untouched and apply whenever the
+         desktop profile is active.
+         - Tile images lose the two chained drop-shadow() filters
+           (the permanent per-image paint cost on all 64 pieces); depth
+           is replaced by ONE static box-shadow on the piece container.
+         - Matched pieces lose the brightness/saturate FILTER: the
+           highlight is the existing transform scale pulse plus the
+           per-type glow ring (::after border/box-shadow on the piece,
+           never a filter on the img) with a translucent overlay tint.
+         - Selected pieces lose their img filters the same way; the
+           gold ring (::after) and scale remain.
+         - Particles lose their per-particle glow shadow and sit at
+           z-index 1 — BELOW the piece layer (pieces rest at z 2+row)
+           for the whole battle, so falling tiles always read above
+           lingering debris. Particles keep pointer-events: none. */
+      html[data-dm-profile="mobile"] .piece { box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45); }
+      html[data-dm-profile="mobile"] .piece img { filter: none; }
+      html[data-dm-profile="mobile"] .piece.matched { filter: none; }
+      html[data-dm-profile="mobile"] .piece.matched::after { background: rgba(255, 255, 255, 0.13); }
+      html[data-dm-profile="mobile"] .piece.selected img { filter: none; }
+      html[data-dm-profile="mobile"] .fx-particle { box-shadow: none !important; z-index: 1; }
+
       @media (prefers-reduced-motion: reduce) {
         .piece.clearing img { animation-duration: 60ms; }
         .piece.matched img { animation-duration: 60ms; }
@@ -1894,6 +1919,52 @@
           return new Promise(function (res) { setTimeout(res, fastResolve ? 0 : (reducedMotion ? Math.min(ms, 40) : ms)); });
         }
         function dur(ms) { return (fastResolve || reducedMotion) ? 0 : ms; }
+        /* Milestone 1G.2 — completion-based stage pacing for the
+           match-hold and destruction stages (shared resolution path;
+           profile durations unchanged). Instead of advancing on a
+           bare timer, collect the stage's OWN animations — the matched
+           pieces' pulse animations for hold, the clearing pieces'
+           clear animations for destroy, found via getAnimations on
+           the piece subtrees (the animations live on the inner <img>)
+           — and advance when they have all finished. A bounded
+           fallback timer of duration + 150ms tolerance guarantees
+           advancement if completion never fires (cancelled animation,
+           missing WAAPI, background tab): the fallback is NEVER
+           shorter than the configured stage duration, so it cannot
+           advance while the effect is still visibly running. A
+           single-fire guard makes completion and fallback mutually
+           exclusive — the stage resolves exactly once — and a
+           cancelled animation's rejected finished promise is treated
+           as finished-for-advancement through the same guard. If no
+           animations are found at all, the previous timer behavior
+           is kept for that stage. Handles are local to the call and
+           released when it resolves; nothing is retained per turn. */
+        function waitForPieceStage(pieces, durationMs) {
+          if (fastResolve || reducedMotion || !pieces || !pieces.length) return wait(durationMs);
+          var anims = [];
+          pieces.forEach(function (p) {
+            if (!p || !p.el || !p.el.getAnimations) return;
+            try {
+              p.el.getAnimations({ subtree: true }).forEach(function (a) {
+                if (a && a.playState !== "finished") anims.push(a);
+              });
+            } catch (err) { /* fall through to the timer path */ }
+          });
+          if (!anims.length) return wait(durationMs);
+          return new Promise(function (resolve) {
+            var done = false, timer = null;
+            function finish() {
+              if (done) return;
+              done = true;
+              if (timer) { clearTimeout(timer); timer = null; }
+              resolve();
+            }
+            timer = setTimeout(finish, durationMs + 150);
+            Promise.all(anims.map(function (a) {
+              return (a && a.finished) ? a.finished.catch(function () {}) : Promise.resolve();
+            })).then(finish, finish);
+          });
+        }
         /* Milestone 1E.2 pacing (uniform for EVERY cascade — later
            cascades are never rushed): swap stays snappy at 175ms out /
            195ms back; a formed match pulses and holds 160ms before
@@ -1943,11 +2014,21 @@
             fallBase: 330, fallPerRow: 24, fallMax: 500,
             particleScale: 1.7, travelScale: 1.2, glowPx: 10,
             fx: {
-              sword:  { count: 7, colors: ["#f0d488", "#e3ac3c", "#d9dce4", "#fff6d8"], kind: "shard", durMin: 520, durVar: 160 },
-              shield: { count: 7, colors: ["#cfe4fa", "#5b9bd5", "#f2f7fd", "#aebfd2"], kind: "shard", durMin: 520, durVar: 160 },
-              heart:  { count: 8, colors: ["#ff8296", "#e0495c", "#ffc9d2", "#ffffff"], kind: "shard", durMin: 540, durVar: 180 },
-              soul:   { count: 6, colors: ["#d9c2ff", "#a678e8", "#8b5fe0", "#f1eaff"], kind: "wisp",  durMin: 680, durVar: 220 },
-              gold:   { count: 7, colors: ["#ffe9a8", "#e8c877", "#c9a44a", "#fff6d8"], kind: "shard", durMin: 520, durVar: 160 }
+              /* 1G.2: deliberate per-type count reduction (NOT a uniform
+                 halving). Shards are visually redundant in a burst —
+                 5 larger (×1.7) fragments still read as a break — so
+                 Sword/Shield/Gold go 7→5. Heart keeps one more (8→6):
+                 its red crystal burst is the healing signal. Soul wisps
+                 are Soul's identity and the least numerous already, so
+                 they are cut least (6→5). Sizes (×1.7), travel (×1.2),
+                 colors, kinds and lifetimes are UNCHANGED; the glow
+                 shadow itself is dropped at spawn time on mobile
+                 (spawnParticles), which is the expensive part. */
+              sword:  { count: 5, colors: ["#f0d488", "#e3ac3c", "#d9dce4", "#fff6d8"], kind: "shard", durMin: 520, durVar: 160 },
+              shield: { count: 5, colors: ["#cfe4fa", "#5b9bd5", "#f2f7fd", "#aebfd2"], kind: "shard", durMin: 520, durVar: 160 },
+              heart:  { count: 6, colors: ["#ff8296", "#e0495c", "#ffc9d2", "#ffffff"], kind: "shard", durMin: 540, durVar: 180 },
+              soul:   { count: 5, colors: ["#d9c2ff", "#a678e8", "#8b5fe0", "#f1eaff"], kind: "wisp",  durMin: 680, durVar: 220 },
+              gold:   { count: 5, colors: ["#ffe9a8", "#e8c877", "#c9a44a", "#fff6d8"], kind: "shard", durMin: 520, durVar: 160 }
             }
           }
         };
@@ -1971,6 +2052,11 @@
           profile = ANIM_PROFILES[name] || ANIM_PROFILES.desktop;
           document.documentElement.style.setProperty("--dm-clear-ms", profile.destroy + "ms");
           document.documentElement.style.setProperty("--dm-pulse-ms", profile.pulseMs + "ms");
+          /* 1G.2: expose the active profile to CSS so the mobile-only
+             paint/layering rules can scope to it. Desktop gets the
+             attribute too ("desktop") and no rule keys off it, so the
+             desktop presentation is unchanged. */
+          document.documentElement.setAttribute("data-dm-profile", animProfileName);
         }
         function refreshAnimProfile() { if (!busy) applyAnimProfile(detectAnimProfileName()); }
         applyAnimProfile(detectAnimProfileName());
@@ -2319,7 +2405,11 @@
             p.style.left = cx + "px";
             p.style.top = cy + "px";
             p.style.background = color;
-            p.style.boxShadow = "0 0 " + profile.glowPx + "px " + color;
+            /* 1G.2: on mobile the per-particle glow shadow is the
+               expensive part and is removed entirely (particles keep
+               their size, color and motion, which carry the effect at
+               phone size). Desktop spawns keep the glow verbatim. */
+            p.style.boxShadow = (animProfileName === "mobile") ? "none" : ("0 0 " + profile.glowPx + "px " + color);
             boardEl.appendChild(p);
             var durMs = fx.durMin + Math.random() * fx.durVar;
             var anim;
@@ -2472,7 +2562,10 @@
                with their artwork fully intact, so it is unmistakable
                which pieces are about to break. */
             matched.forEach(function (p) { p.el.classList.add("matched"); });
-            await wait(profile.matchHold);
+            /* 1G.2: advance on the pulse animations' actual completion
+               (fallback: matchHold + 150ms), so gravity/destruction can
+               never start while the hold is still visibly running. */
+            await waitForPieceStage(matched, profile.matchHold);
             /* Destruction: the pieces shatter over profile.destroy
                (the CSS piece-clear animation, whose duration the
                profile sets via --dm-clear-ms) while their
@@ -2484,7 +2577,11 @@
               p.el.classList.add("clearing");
               spawnParticles(p);
             });
-            await wait(profile.destroy);
+            /* 1G.2: advance on the clear animations' actual completion
+               (fallback: destroy + 150ms) — pieces are removed and
+               gravity starts only once destruction has visibly
+               finished, never cut short by the logical board update. */
+            await waitForPieceStage(matched, profile.destroy);
             matched.forEach(function (p) {
               grid[p.r][p.c] = null;
               p.el.remove();
