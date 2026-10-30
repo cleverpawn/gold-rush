@@ -451,6 +451,25 @@
         font-style: italic;
       }
 
+      /* Milestone 1I: version label — selection screen only. Small and
+         subordinate to the title, in the muted parchment tone. It sits
+         in normal flow directly under the Begin block; on phone
+         portrait layouts its height is absorbed by the dev panel's
+         existing auto top margin (the empty space above that panel),
+         so the hero grid, detail panel, Begin button and dev panel
+         keep their exact positions and nothing scrolls. Its text is
+         rendered from the single DM_VERSION definition (see the
+         version script below) — never a second hardcoded string. */
+      .version-label {
+        margin: 12px 0 0;
+        text-align: center;
+        font-family: "Cinzel", serif;
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        color: var(--bone-dim);
+        opacity: 0.85;
+      }
+
       /* Milestone 1E.4: ONE shared detail panel under the grid carries
          the selected hero's title, HP and passive — the six cards
          themselves hold portrait + name only, so all six fit on a
@@ -1860,6 +1879,12 @@
           <p class="begin-note">Descend into the Sunken Crypt with <span id="begin-hero-name">the Knight</span>.</p>
         </div>
 
+        <!-- Milestone 1I: visible version label (selection screen
+             only). Text is filled from DM_VERSION by the version
+             script — intentionally empty in the markup so the
+             definition stays the page's only version string. -->
+        <p class="version-label" id="version-label"></p>
+
         <!-- Milestone 1E: development/test-only encounter picker. It lives
              here, NOT in the battle, so it never takes gameplay space.
              The chosen encounter applies when the next battle begins. -->
@@ -2067,6 +2092,37 @@
         </div>
       </section>
     </main>
+
+    <script>
+      /* ===================================================
+         Milestone 1I — THE single authoritative version definition
+         for Dungeon Match — Muse Edition. Every version string the
+         page displays is derived from this object; there are no
+         other hardcoded version strings in the page. The Git commit
+         is deliberately NOT embedded here: the release commit is
+         created by publishing this page, so the commit is resolved
+         from Git after publication and bound to this version by the
+         release Git tag and the GitHub Release record (see
+         CHANGELOG.md / RELEASING.md in the repository). */
+      const DM_VERSION = {
+        game: "Dungeon Match",
+        edition: "Muse",
+        version: "0.1.0",
+        releaseName: "Combat Prototype",
+        releaseDate: "2026-10-29"
+      };
+      /* Derived display string, built from the fields above:
+         game + edition + version, joined for display. */
+      DM_VERSION.display =
+        DM_VERSION.game + " · " + DM_VERSION.edition + " Edition · v" + DM_VERSION.version;
+      Object.freeze(DM_VERSION);
+      window.DM_VERSION = DM_VERSION;
+      /* Render the selection-screen label from the definition. */
+      (function renderVersionLabel() {
+        var el = document.getElementById("version-label");
+        if (el) el.textContent = DM_VERSION.display;
+      })();
+    </script>
 
     <script>
       (function () {
