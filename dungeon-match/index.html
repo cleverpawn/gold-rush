@@ -72,6 +72,36 @@
         --tile-soul: #a678e8;
         --panel-border: #463a2c;
         --shadow: rgba(0, 0, 0, 0.55);
+        /* Milestone 1H.1: safe-area insets are read ONCE, here, into
+           variables every screen consumes. Previously env() was
+           scattered across six declarations inside two media queries
+           only — the base battle and selection screens had flat
+           padding with no inset at all, so in a standalone
+           (home-screen) launch, where black-translucent draws the
+           page UNDER the status bar / Dynamic Island, clearance
+           depended on which breakpoint happened to match. One
+           variable also makes the inset simulatable in verification
+           (override --dm-sat/--dm-sab on <html>) — desktop Chromium
+           reports env() as 0 and cannot apply real iPhone insets. */
+        --dm-sat: env(safe-area-inset-top, 0px);
+        --dm-sar: env(safe-area-inset-right, 0px);
+        --dm-sab: env(safe-area-inset-bottom, 0px);
+        --dm-sal: env(safe-area-inset-left, 0px);
+      }
+
+      /* Milestone 1H.1: standalone/fullscreen portrait phones — the
+         home-screen launch Mike approved — always get at least the
+         full status-bar clearance of current notch/Dynamic-Island
+         phones, even if env() under-reports in that context. When
+         env() reports correctly this changes nothing (max wins);
+         it is a floor, not added padding. Funded by the compact
+         portrait-phone chrome below, never by the board. */
+      @media (display-mode: standalone) and (max-width: 700px) and (orientation: portrait),
+             (display-mode: fullscreen) and (max-width: 700px) and (orientation: portrait) {
+        :root {
+          --dm-sat: max(env(safe-area-inset-top, 0px), 59px);
+          --dm-sab: max(env(safe-area-inset-bottom, 0px), 34px);
+        }
       }
 
       * { box-sizing: border-box; }
@@ -241,7 +271,12 @@
       #screen-select {
         max-width: 1180px;
         margin: 0 auto;
-        padding: 44px 20px 56px;
+        /* 1H.1: the selection heading honors the top inset at EVERY
+           width — previously only the ≤700px layout did, so a
+           standalone launch at tablet/desktop widths could put
+           "Dungeon Match" under the status bar. env() is 0 in an
+           ordinary browser tab, so browser presentation is unchanged. */
+        padding: calc(44px + var(--dm-sat)) calc(20px + var(--dm-sar)) calc(56px + var(--dm-sab)) calc(20px + var(--dm-sal));
       }
 
       .game-title {
@@ -495,7 +530,11 @@
       #screen-battle {
         max-width: 1320px;
         margin: 0 auto;
-        padding: 14px 18px 14px;
+        /* 1H.1: base battle padding honors the insets too (was flat
+           14px/18px) — the dungeon heading is the topmost element in
+           every layout, so its clearance cannot depend on a
+           breakpoint remembering to add env() back. */
+        padding: calc(14px + var(--dm-sat)) calc(18px + var(--dm-sar)) calc(14px + var(--dm-sab)) calc(18px + var(--dm-sal));
         /* 1E.1: height comes from --app-h, set in JS from the ACTUAL
            visible viewport (visualViewport / innerHeight). 100dvh alone
            overstated the visible height in mobile Safari — the page
@@ -1231,7 +1270,7 @@
           overflow-x: hidden;
           display: flex;
           flex-direction: column;
-          padding: calc(10px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px));
+          padding: calc(10px + var(--dm-sat)) calc(12px + var(--dm-sar)) calc(10px + var(--dm-sab)) calc(12px + var(--dm-sal));
         }
         #screen-select > * { flex: none; }
         .game-title { font-size: 1.5rem; letter-spacing: 0.12em; }
@@ -1262,17 +1301,31 @@
         /* 1E.1: respect device safe areas so nothing slides under a
            notch or home indicator. */
         #screen-battle {
-          padding: calc(10px + env(safe-area-inset-top, 0px)) calc(10px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) calc(10px + env(safe-area-inset-left, 0px));
+          padding: calc(10px + var(--dm-sat)) calc(10px + var(--dm-sar)) calc(10px + var(--dm-sab)) calc(10px + var(--dm-sal));
         }
-        .battle-topbar { margin-bottom: 6px; gap: 8px; flex-wrap: nowrap; }
-        .location-name { font-size: 1.12rem; letter-spacing: 0.06em; }
-        .location-sub { font-size: 0.66rem; letter-spacing: 0.18em; }
+        /* 1H.1: the dungeon heading becomes ONE compact line on
+           portrait phones — name and floor subtitle side by side —
+           instead of two stacked lines. This is the primary funding
+           for the safe-area clearance above: the heading gives back
+           ~24px of vertical space so the top inset (and the Duo
+           roster) are paid for by decorative stacking, never by the
+           board. Both texts keep their content, fonts and colours. */
+        .battle-topbar { margin-bottom: 4px; gap: 8px; flex-wrap: nowrap; }
+        .location-block { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+        .location-name { font-size: 1.12rem; letter-spacing: 0.06em; white-space: nowrap; }
+        /* The floor subtitle cannot share the phone top strip with
+           the full dungeon name and the Change Champion button — it
+           ellipsized to "FLO…" — so portrait phones show the dungeon
+           name alone as the compact heading (the same call the
+           short-phone layout already made). The subtitle remains in
+           the markup and is shown in full at tablet/desktop widths. */
+        .location-sub { display: none; }
         .back-btn { padding: 7px 10px; font-size: 0.68rem; letter-spacing: 0.08em; white-space: nowrap; }
 
         .battle-grid {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 5px;
           align-items: stretch;
         }
         /* 1E overlap fix: the board column used to centre its contents
@@ -1335,16 +1388,16 @@
         /* compact combatant panels: thumbnail portrait + stats grid */
         .combatant {
           display: grid;
-          grid-template-columns: 44px minmax(0, 1fr) auto;
+          grid-template-columns: 40px minmax(0, 1fr) auto;
           column-gap: 10px;
-          row-gap: 3px;
+          row-gap: 2px;
           align-items: center;
-          padding: 7px 10px;
+          padding: 6px 10px;
           flex: none;
         }
         .combatant .portrait-lg {
-          width: 44px;
-          height: 44px;
+          width: 40px;
+          height: 40px;
           grid-column: 1;
           grid-row: 1 / span 2;
           border-radius: 6px;
@@ -1354,36 +1407,59 @@
         .combatant .hp-row { grid-column: 3; grid-row: 1 / span 2; margin: 0; align-self: center; }
         .combatant .hp-value { font-size: 0.98rem; }
         .combatant .hp-label { display: none; }
-        .combatant .hp-bar { grid-column: 1 / -1; height: 9px; margin-top: 3px; }
+        .combatant .hp-bar { grid-column: 1 / -1; height: 9px; margin-top: 2px; }
         .enemy-panel .intent {
           grid-column: 1 / -1;
-          margin-top: 3px;
+          margin-top: 2px;
           padding: 4px 8px;
           gap: 8px;
         }
         .enemy-panel .intent svg { width: 17px; height: 17px; }
-        .enemy-panel .intent .intent-text { font-size: 0.88rem; }
-        .enemy-panel .intent .intent-label { font-size: 0.58rem; }
+        /* 1H.1: intent label and text share ONE line (label stays
+           visible — intentions are never hidden — it just stops
+           stacking above the text and costing a second line). */
+        .enemy-panel .intent > span { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+        .enemy-panel .intent .intent-text { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .enemy-panel .intent .intent-label { font-size: 0.58rem; display: inline; flex: none; }
         /* 1E: roster rides in the enemy grid as one compact strip —
            label/count inline at the left, chips beside them, so the
            whole roster costs a single short row of height. */
         .enemy-panel .enemy-roster {
           grid-column: 1 / -1;
-          margin-top: 4px;
-          padding-top: 6px;
+          margin-top: 2px;
+          padding-top: 4px;
           display: flex;
           align-items: center;
           gap: 8px;
         }
+        /* 1H.1 Duo funding: in a Duo the roster already identifies
+           both foes (portrait, name, HP, attack per chip), so the
+           featured card drops its decorative title line and uses a
+           slightly smaller thumbnail. Name, HP, bar and intent —
+           the essential combat information — are untouched, and
+           Solo keeps its full featured presentation. Fixed heights
+           here keep target switching free of layout shift: the
+           panel is the same height whichever foe is featured. */
+        .enemy-panel:not(.solo) .combatant-title { display: none; }
+        .enemy-panel:not(.solo) .portrait-lg { width: 32px; height: 32px; }
         .enemy-panel .roster-head { flex-direction: column; gap: 0; margin-bottom: 0; flex: none; }
         .enemy-panel .roster-count { font-size: 0.68rem; white-space: nowrap; }
         /* min-width: 0 down the whole flex chain, or the row refuses to
            shrink and the second chip spills past the panel edge. */
         .enemy-panel .roster-row { flex: 1; min-width: 0; }
-        .enemy-panel .roster-chip { padding: 4px 6px; gap: 6px; min-height: 38px; flex: 1 1 0; min-width: 0; }
+        .enemy-panel .roster-chip { padding: 3px 6px; gap: 6px; min-height: 30px; flex: 1 1 0; min-width: 0; position: relative; overflow: hidden; }
+        /* 1H.1: phone roster chips go single-line — portrait, name,
+           HP number and attack on one row, with the HP bar as a
+           progress strip along the chip's bottom edge (same data,
+           same fill %, ~12px shorter per chip row). The featured
+           panel above keeps the full labelled HP bar. */
+        .enemy-panel .chip-main { flex-direction: row; align-items: center; gap: 8px; }
+        .enemy-panel .chip-name { letter-spacing: 0.02em; }
+        .enemy-panel .chip-meta { flex: none; }
+        .enemy-panel .chip-hpbar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border: 0; border-radius: 0; }
         .enemy-panel .chip-top { min-width: 0; }
         .enemy-panel .chip-name { min-width: 0; }
-        .enemy-panel .roster-chip img { width: 24px; height: 24px; }
+        .enemy-panel .roster-chip img { width: 20px; height: 20px; }
         .target-tag { display: none; }
 
         .player-panel .stat-row {
@@ -1420,7 +1496,7 @@
         .player-panel.gold-active #block-box { flex: 0.82 1 0; }
         .player-panel.gold-active #soul-box { flex: 1.38 1 0; }
         .player-panel.gold-active #gold-box { flex: 0.95 1 0; }
-        .player-panel .stat-box { padding: 4px 8px; gap: 6px; }
+        .player-panel .stat-box { padding: 3px 8px; gap: 6px; }
         /* 1E: label + value must stay on ONE line — wrapping the Soul
            Charge box to two lines was inflating the player panel and
            pushing Soul Burst off the bottom of short screens. */
@@ -1433,8 +1509,8 @@
         .player-panel .soul-pips { display: none; }
         .player-panel .soul-burst-btn {
           grid-column: 1 / -1;
-          margin-top: 4px;
-          padding: 7px 10px;
+          margin-top: 3px;
+          padding: 6px 10px;
           font-size: 0.92rem;
         }
         .player-panel .soul-burst-cost { display: none; }
@@ -1446,7 +1522,7 @@
            flex:none let the fixed-size board claim its full height and
            push over the panels below it. */
         .board-col { flex: 1 1 auto; min-height: 0; }
-        #screen-battle { padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+        #screen-battle { padding-bottom: calc(6px + var(--dm-sab)); }
         .battle-topbar { flex-wrap: nowrap; margin-bottom: 6px; }
         .battle-grid { gap: 6px; }
         .location-name { font-size: 1rem; letter-spacing: 0.05em; white-space: nowrap; }
@@ -1462,7 +1538,7 @@
            for the feedback strip, not the board — smaller portraits,
            chips, paddings and gaps. No information is removed; every
            value, label and control stays on screen. */
-        #screen-battle { padding-top: calc(8px + env(safe-area-inset-top, 0px)); padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px)); }
+        #screen-battle { padding-top: calc(8px + var(--dm-sat)); padding-bottom: calc(4px + var(--dm-sab)); }
         .battle-topbar { margin-bottom: 4px; }
         .battle-grid { gap: 3px; }
         .turn-feedback { min-height: 0; font-size: 0.7rem; line-height: 1.22; padding: 3px 8px; margin-top: 4px; }
@@ -1522,7 +1598,7 @@
          viewports) — tighten the selection chrome only; every element
          stays present and readable, nothing is hidden. */
       @media (max-width: 700px) and (max-height: 720px) {
-        #screen-select { padding-top: calc(7px + env(safe-area-inset-top, 0px)); padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px)); }
+        #screen-select { padding-top: calc(7px + var(--dm-sat)); padding-bottom: calc(7px + var(--dm-sab)); }
         .game-title { font-size: 1.28rem; }
         .title-rule { display: none; }
         .select-heading { font-size: 0.88rem; margin-top: 2px; }
@@ -1547,11 +1623,17 @@
          =================================================== */
       @media (min-width: 701px) and (max-width: 940px) and (orientation: portrait) {
         #screen-battle {
-          padding: calc(12px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+          padding: calc(12px + var(--dm-sat)) calc(16px + var(--dm-sar)) calc(12px + var(--dm-sab)) calc(16px + var(--dm-sal));
         }
         .battle-topbar { margin-bottom: 8px; gap: 10px; flex-wrap: nowrap; }
-        .location-name { font-size: 1.35rem; }
-        .location-sub { font-size: 0.74rem; }
+        /* 1H.1: same one-line compact heading as portrait phones —
+           pays for the Duo roster row so the tablet board keeps its
+           Solo size in Duo encounters too. */
+        .location-block { display: flex; align-items: baseline; gap: 11px; min-width: 0; }
+        /* Slightly reduced so name + FULL floor subtitle + button
+           share the line without the subtitle ellipsizing. */
+        .location-name { font-size: 1.22rem; white-space: nowrap; }
+        .location-sub { font-size: 0.72rem; letter-spacing: 0.16em; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .back-btn { padding: 8px 13px; font-size: 0.78rem; white-space: nowrap; }
 
         .battle-grid {
@@ -1611,20 +1693,26 @@
           gap: 8px;
         }
         .enemy-panel .intent svg { width: 18px; height: 18px; }
-        .enemy-panel .intent .intent-text { font-size: 0.9rem; }
-        .enemy-panel .intent .intent-label { font-size: 0.58rem; }
+        /* 1H.1: one-line intent (label inline, never hidden). */
+        .enemy-panel .intent > span { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+        .enemy-panel .intent .intent-text { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .enemy-panel .intent .intent-label { font-size: 0.58rem; display: inline; flex: none; }
         .enemy-panel .enemy-roster {
           grid-column: 1 / -1;
-          margin-top: 4px;
-          padding-top: 6px;
+          margin-top: 2px;
+          padding-top: 4px;
           display: flex;
           align-items: center;
           gap: 8px;
         }
+        /* 1H.1 Duo funding (see the portrait-phone rule): the roster
+           identifies both foes, so the featured card drops only its
+           decorative title line in Duo; Solo is untouched. */
+        .enemy-panel:not(.solo) .combatant-title { display: none; }
         .enemy-panel .roster-head { flex-direction: column; gap: 0; margin-bottom: 0; flex: none; }
         .enemy-panel .roster-count { font-size: 0.7rem; white-space: nowrap; }
         .enemy-panel .roster-row { flex: 1; min-width: 0; }
-        .enemy-panel .roster-chip { padding: 4px 6px; gap: 6px; min-height: 38px; flex: 1 1 0; min-width: 0; }
+        .enemy-panel .roster-chip { padding: 3px 6px; gap: 6px; min-height: 34px; flex: 1 1 0; min-width: 0; }
         .enemy-panel .roster-chip img { width: 24px; height: 24px; }
 
         .player-panel .stat-row {
