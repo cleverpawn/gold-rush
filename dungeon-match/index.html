@@ -1094,6 +1094,55 @@
          170ms / 370ms; mobile = longer). The keyframes themselves —
          the staged break — are shared unchanged by both profiles;
          only their duration stretches. */
+      /* Milestone 1K — persistent Match-4 specials. The marker is a
+         small gold badge (a DOM span, .special-marker) plus a restrained
+         outline on the piece ELEMENT — never a filter on the tile <img>,
+         so the 1G.2 mobile paint rules stay literally true. Row
+         specials carry a horizontal double-arrow, column specials a
+         vertical one, so orientation reads at a glance while the
+         original artwork stays fully visible. */
+      .piece.special {
+        box-shadow: 0 0 0 2px rgba(232, 200, 119, 0.9), 0 0 10px rgba(232, 200, 119, 0.45), 0 2px 5px rgba(0, 0, 0, 0.45);
+      }
+      .special-marker {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        z-index: 6;
+        min-width: 15px;
+        height: 15px;
+        padding: 0 2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        color: #241a04;
+        background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+        border: 1px solid rgba(0, 0, 0, 0.45);
+        border-radius: 4px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+        pointer-events: none;
+      }
+      .piece.special-born { animation: special-born 620ms ease; }
+      @keyframes special-born {
+        0% { box-shadow: 0 0 0 2px rgba(232, 200, 119, 0.9), 0 0 4px rgba(232, 200, 119, 0.3); }
+        45% { box-shadow: 0 0 0 3px rgba(232, 200, 119, 1), 0 0 22px rgba(232, 200, 119, 0.95); }
+        100% { box-shadow: 0 0 0 2px rgba(232, 200, 119, 0.9), 0 0 10px rgba(232, 200, 119, 0.45); }
+      }
+      /* Milestone 1K: directional sweep shown while a special's line
+         resolves — a translucent gold band animated with WAAPI
+         (opacity/transform only), removed when its animation ends,
+         exactly like the particle nodes. */
+      .fx-sweep {
+        position: absolute;
+        z-index: 13;
+        pointer-events: none;
+        border-radius: 8px;
+        background: linear-gradient(90deg, rgba(232, 200, 119, 0.05), rgba(232, 200, 119, 0.5), rgba(232, 200, 119, 0.05));
+      }
+      .fx-sweep.col { background: linear-gradient(180deg, rgba(232, 200, 119, 0.05), rgba(232, 200, 119, 0.5), rgba(232, 200, 119, 0.05)); }
       .piece.sword { --fx: #e8c877; }
       .piece.shield { --fx: #8fc1ee; }
       .piece.heart { --fx: #ff8296; }
@@ -1159,6 +1208,10 @@
       html[data-dm-profile="mobile"] .piece.matched::after { background: rgba(255, 255, 255, 0.13); }
       html[data-dm-profile="mobile"] .piece.selected img { filter: none; }
       html[data-dm-profile="mobile"] .fx-particle { box-shadow: none !important; z-index: 1; }
+      /* 1K: on mobile the special outline is the same box-shadow
+         technique (no img filter is ever added); the permanent
+         drop shadow is folded into the one declaration. */
+      html[data-dm-profile="mobile"] .piece.special { box-shadow: 0 0 0 2px rgba(232, 200, 119, 0.9), 0 0 8px rgba(232, 200, 119, 0.4), 0 2px 5px rgba(0, 0, 0, 0.45); }
 
       @media (prefers-reduced-motion: reduce) {
         .piece.clearing img { animation-duration: 60ms; }
@@ -2522,9 +2575,109 @@
           img.draggable = false;
           img.decoding = "async";
           el.appendChild(img);
-          var piece = { id: nextPieceId++, type: type, r: r, c: c, el: el };
+          var piece = { id: nextPieceId++, type: type, r: r, c: c, el: el, special: null };
           el._piece = piece;
           return piece;
+        }
+
+        /* ---------- Milestone 1K: persistent Match-4 specials ----------
+           A piece may carry piece.special === "row" (clears its row —
+           created by a horizontal 4-match) or "col" (clears its column
+           — vertical 4-match); null means an ordinary piece. The flag
+           lives on the piece OBJECT, so it travels through gravity,
+           swaps and cascades with the piece's identity and type, and
+           refill pieces (createPiece) are always ordinary — specials
+           never spawn from generation or refill. The visual state is
+           derived from the flag by syncSpecialVisual: classes + one
+           marker span on the piece element, no img filters. */
+        function syncSpecialVisual(piece) {
+          if (!piece || !piece.el) return;
+          var el = piece.el;
+          el.classList.toggle("special", !!piece.special);
+          el.classList.toggle("special-row", piece.special === "row");
+          el.classList.toggle("special-col", piece.special === "col");
+          var marker = el.querySelector(".special-marker");
+          if (piece.special) {
+            if (!marker) {
+              marker = document.createElement("span");
+              marker.className = "special-marker";
+              marker.setAttribute("aria-hidden", "true");
+              el.appendChild(marker);
+            }
+            marker.textContent = piece.special === "row" ? "↔" : "↕";
+            el.setAttribute("aria-label", TYPE_LABEL[piece.type] + (piece.special === "row" ? ", enchanted, clears its row" : ", enchanted, clears its column"));
+          } else {
+            if (marker) marker.remove();
+            el.setAttribute("aria-label", TYPE_LABEL[piece.type]);
+          }
+        }
+        function setPieceSpecial(piece, orient) {
+          if (!piece) return;
+          piece.special = (orient === "row" || orient === "col") ? orient : null;
+          syncSpecialVisual(piece);
+        }
+        function setPieceType(piece, type) {
+          if (!piece || !srcMap[type]) return;
+          ALL_TYPES.forEach(function (t) { piece.el.classList.remove(t); });
+          piece.el.classList.add(type);
+          piece.el.dataset.type = type;
+          piece.type = type;
+          var img = piece.el.querySelector("img");
+          if (img) img.src = srcMap[type];
+          syncSpecialVisual(piece);
+        }
+        function boardSpecials() {
+          var out = [];
+          for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
+            var p = grid[r] && grid[r][c];
+            if (p && p.special) out.push({ r: p.r, c: p.c, type: p.type, special: p.special, id: p.id });
+          }
+          return out;
+        }
+        function boardHasSpecial() {
+          for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
+            var p = grid[r] && grid[r][c];
+            if (p && p.special) return true;
+          }
+          return false;
+        }
+
+        /* Connected match groups on a plain type grid: the detector's
+           runs (findTypeRunsIn, per type) merged into components where
+           runs share a tile — the same union the group counter uses,
+           but keeping the cells and runs. 1K creation reads these: a
+           component qualifies ONLY when it is exactly one straight
+           run of exactly 4 cells (see resolveBoard). */
+        function findMatchComponents(types) {
+          var runs = [];
+          ALL_TYPES.forEach(function (t) {
+            findTypeRunsIn(types, t).forEach(function (cells) {
+              runs.push({ type: t, cells: cells });
+            });
+          });
+          var parent = runs.map(function (_, i) { return i; });
+          function findRoot(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+          var owner = {};
+          runs.forEach(function (run, idx) {
+            run.cells.forEach(function (key) {
+              if (Object.prototype.hasOwnProperty.call(owner, key)) {
+                var ra = findRoot(idx), rb = findRoot(owner[key]);
+                if (ra !== rb) parent[rb] = ra;
+              } else owner[key] = idx;
+            });
+          });
+          var byRoot = {};
+          runs.forEach(function (run, idx) {
+            var root = findRoot(idx);
+            if (!byRoot[root]) byRoot[root] = { type: run.type, runs: [], cellSet: {} };
+            byRoot[root].runs.push(run);
+            run.cells.forEach(function (key) { byRoot[root].cellSet[key] = true; });
+          });
+          return Object.keys(byRoot).map(function (k) {
+            var comp = byRoot[k];
+            comp.cells = Object.keys(comp.cellSet);
+            return comp;
+          });
         }
 
         /* ---------- match detection on a plain type grid ---------- */
@@ -2817,11 +2970,110 @@
           return [pa, pb];
         }
 
+        /* Milestone 1K: the most recent turn's totals (ordinary +
+           line ledgers), exposed read-only for verification. */
+        var lastTurnTotals = null;
+
+        /* Milestone 1K: directional sweep along a firing special's
+           line — one translucent band node per fired special,
+           animated with WAAPI (opacity/transform only) and removed
+           when its own animation ends, like the particle nodes.
+           Skipped entirely under fastResolve / reduced motion. */
+        function spawnLineSweep(piece) {
+          if (fastResolve || reducedMotion || !piece || !measure() || !piece.el.animate) return;
+          var band = document.createElement("div");
+          band.className = "fx-sweep" + (piece.special === "col" ? " col" : "");
+          var boardW = COLS * stepPx;
+          if (piece.special === "row") {
+            band.style.left = "0px";
+            band.style.top = (piece.r * stepPx) + "px";
+            band.style.width = boardW + "px";
+            band.style.height = cellPx + "px";
+          } else {
+            band.style.left = (piece.c * stepPx) + "px";
+            band.style.top = "0px";
+            band.style.width = cellPx + "px";
+            band.style.height = boardW + "px";
+          }
+          boardEl.appendChild(band);
+          var anim;
+          try {
+            anim = band.animate([
+              { opacity: 0, transform: piece.special === "row" ? "scaleX(0.25)" : "scaleY(0.25)" },
+              { opacity: 1, transform: piece.special === "row" ? "scaleX(1)" : "scaleY(1)", offset: 0.35 },
+              { opacity: 0, transform: piece.special === "row" ? "scaleX(1)" : "scaleY(1)" }
+            ], { duration: profile.matchHold + profile.destroy, easing: "ease-out" });
+          } catch (err) { band.remove(); return; }
+          if (anim && anim.finished) anim.finished.then(function () { band.remove(); }, function () { band.remove(); });
+          else setTimeout(function () { band.remove(); }, profile.matchHold + profile.destroy + 60);
+        }
+
+        /* Milestone 1K: resolve one special ACTIVATION (the activator
+           has already been swapped into its post-swap cell).
+           CHAIN RULE (deterministic): the closure is computed BEFORE
+           anything is removed — start with the activator's line; any
+           special whose cell falls in a cleared line adds its own
+           line from its current cell; iterate to a fixed point; each
+           special fires at most once. The union of all lines is then
+           removed exactly once (unique-cell accounting) in ONE
+           hold/destroy stage pair — chains never serialize per-special
+           waits. ACCOUNTING: line clears fill ledger (ii) — per-type
+           UNIQUE counts in totals[t] and totals.line[t], never group
+           counts, never passive-eligible. Gravity/refill follows,
+           then resolveBoard runs any cascades as ordinary
+           passive-eligible groups in the same turn. */
+        async function resolveSpecialActivation(totals, activator) {
+          var fired = [], firedIds = {}, clearedMap = {}, queue = [activator];
+          firedIds[activator.id] = true;
+          while (queue.length) {
+            var sp = queue.shift();
+            fired.push(sp);
+            var cells = [], i;
+            if (sp.special === "row") { for (i = 0; i < COLS; i++) cells.push([sp.r, i]); }
+            else { for (i = 0; i < ROWS; i++) cells.push([i, sp.c]); }
+            cells.forEach(function (rc) {
+              var p = grid[rc[0]][rc[1]];
+              if (!p) return;
+              var k = rc[0] + "," + rc[1];
+              if (clearedMap[k]) return;
+              clearedMap[k] = p;
+              if (p.special && !firedIds[p.id]) { firedIds[p.id] = true; queue.push(p); }
+            });
+          }
+          var cleared = Object.keys(clearedMap).map(function (k) { return clearedMap[k]; });
+          totals.line = { sword: 0, shield: 0, heart: 0, soul: 0, gold: 0 };
+          cleared.forEach(function (p) { totals[p.type]++; totals.line[p.type]++; });
+          totals.specialsFired = fired.map(function (sp) {
+            return { id: sp.id, type: sp.type, special: sp.special, r: sp.r, c: sp.c };
+          });
+          totals.lineSteps = 1;
+          fired.forEach(function (sp) { spawnLineSweep(sp); });
+          cleared.forEach(function (p) { p.el.classList.add("matched"); });
+          await waitForPieceStage(cleared, profile.matchHold);
+          cleared.forEach(function (p) {
+            p.el.classList.remove("matched");
+            p.el.classList.add("clearing");
+            spawnParticles(p);
+          });
+          await waitForPieceStage(cleared, profile.destroy);
+          cleared.forEach(function (p) {
+            grid[p.r][p.c] = null;
+            p.el.remove();
+          });
+          await applyGravityAndRefill();
+          /* Cascades from here are ordinary matching groups. */
+          await resolveBoard(totals);
+        }
+
         /* aFromPx / bFromPx: optional pixel start points (live-drag offset)
            so a swipe's motion starts exactly where the finger left the
            piece — no jump back to the cell origin before animating. */
         async function attemptSwap(a, b, aFromPx, bFromPx) {
           if (busy || combat.gameOver || !grid[a.r][a.c] || !grid[b.r][b.c]) return;
+          /* 1K: only orthogonally adjacent swaps exist — a
+             nonadjacent "activation" is rejected here just as a
+             nonadjacent ordinary swap always was by the input layer. */
+          if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) return;
           /* 1E.2M: (re)select the presentation profile NOW and lock
              it for the whole resolution sequence — refreshAnimProfile
              is busy-guarded, so nothing can switch it mid-flight. */
@@ -2839,6 +3091,29 @@
             pa0 ? moveAnim(pa0, aFrom.x, aFrom.y, profile.swap, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve(),
             pb0 ? moveAnim(pb0, bFrom.x, bFrom.y, profile.swap, "cubic-bezier(.3,.7,.3,1)") : Promise.resolve()
           ]);
+          /* Milestone 1K ACTIVATION: any swap involving a special
+             activates it — even with no ordinary match — and never
+             reverses. The activator is the piece the player dragged
+             (or selected first in tap-tap): cell a's piece before the
+             swap. If BOTH pieces are specials, a's piece activates;
+             the other chain-activates only if caught in its line,
+             otherwise it stays a special in its new cell. Activation
+             takes precedence over any ordinary match the swap might
+             also form. The effect originates from the activator's
+             POST-swap cell (its r/c now). The other piece stays in
+             the activator's old cell and takes part in gravity and
+             cascades normally. */
+          var activator = null;
+          if (pa0 && pa0.special) activator = pa0;
+          else if (pb0 && pb0.special) activator = pb0;
+          if (activator) {
+            var actTotals = { sword: 0, shield: 0, heart: 0, soul: 0, gold: 0, shieldGroups: 0, soulGroups: 0, heartGroups: 0, swordGroups: 0, goldGroups: 0 };
+            await resolveSpecialActivation(actTotals, activator);
+            lastTurnTotals = actTotals;
+            await runCombatTurn(actTotals);
+            busy = false;
+            return;
+          }
           if (Object.keys(findMatches()).length === 0) {
             /* invalid: fluid return with a restrained overshoot settle,
                logical board restored exactly. 190ms back vs 240+15 before,
@@ -2858,23 +3133,132 @@
              shieldGroups accumulates the distinct Shield match-group
              count per resolution step (1F.1) alongside the tile tally. */
           var totals = { sword: 0, shield: 0, heart: 0, soul: 0, gold: 0, shieldGroups: 0, soulGroups: 0, heartGroups: 0, swordGroups: 0, goldGroups: 0 };
-          await resolveBoard(totals);
+          /* 1K: the swap destination is cell b (where the dragged /
+             second-tapped piece landed) — eligible for special
+             placement on the first resolution step only. */
+          await resolveBoard(totals, { r: b.r, c: b.c });
+          lastTurnTotals = totals;
           await runCombatTurn(totals);
           busy = false;
         }
 
-        async function resolveBoard(totals) {
+        /* Gravity + refill, shared verbatim by ordinary resolution
+           (resolveBoard) and 1K special-line resolution: pieces fall
+           as OBJECTS, so a special's type, orientation and identity
+           ride along; refill pieces are always ordinary. */
+        async function applyGravityAndRefill() {
+          /* Falls run scaled by distance (fallDuration — 272–400ms
+             desktop, 354–500ms mobile) on an accelerating curve whose
+             slight overshoot gives a subtle landing settle, and the
+             stage ends on animation.finished instead of a guessed
+             duration. */
+          measure();
+          var moves = [];
+          for (var c = 0; c < COLS; c++) {
+            var write = ROWS - 1, r, piece;
+            for (r = ROWS - 1; r >= 0; r--) {
+              piece = grid[r][c];
+              if (!piece) continue;
+              if (piece.r !== write) {
+                var fromY = piece.r * stepPx, fromX = piece.c * stepPx;
+                var distRows = write - piece.r;
+                grid[piece.r][c] = null;
+                piece.r = write;
+                grid[write][c] = piece;
+                var fallMs = fallDuration(distRows);
+                moves.push(moveAnim(piece, fromX, fromY, fallMs, "cubic-bezier(.5,.05,.6,1.08)"));
+              }
+              write--;
+            }
+            var empty = write + 1; /* rows 0..write are empty */
+            for (r = write; r >= 0; r--) {
+              var spawnR = r - empty;
+              var np = createPiece(randType(), spawnR, c);
+              boardEl.appendChild(np.el);
+              var sFromX = c * stepPx, sFromY = spawnR * stepPx;
+              np.r = r;
+              grid[r][c] = np;
+              var refillMs = fallDuration(empty);
+              moves.push(moveAnim(np, sFromX, sFromY, refillMs, "cubic-bezier(.5,.05,.6,1.08)"));
+            }
+          }
+          if (moves.length) await Promise.all(moves);
+        }
+
+        /* swapDest (1K, optional): the destination cell {r,c} of the
+           player's swap that started this resolution. It is eligible
+           for special placement on the FIRST resolution step only;
+           cascade steps always use the deterministic fallback. */
+        async function resolveBoard(totals, swapDest) {
           var cascade = 0;
+          var pendingDest = swapDest || null;
           while (true) {
             var matches = findMatches();
             var keys = Object.keys(matches);
             if (!keys.length) break;
             cascade++;
             if (cascade > 60) { resolveStats.capHits++; if (totals) totals.capHit = true; await regenerateBoard(); break; } /* safety: rebuild rather than leave matches behind */
-            var matched = keys.map(function (k) {
+            var allMatched = keys.map(function (k) {
               var parts = k.split(",");
               return grid[Number(parts[0])][Number(parts[1])];
             }).filter(Boolean);
+            /* ---- Milestone 1K: creation + persistence pass ----
+               PLACEMENT RULE (deterministic): a connected match group
+               creates a special ONLY when it is exactly one straight
+               run of exactly 4 tiles of one type (a 5-run, an L/T or
+               any larger/intersecting group creates nothing this
+               milestone; two disjoint straight-4 groups in one step
+               each create one). If the player's swap destination cell
+               (first step only) belongs to the group, the special is
+               created there; otherwise — and always for cascade
+               groups — it is created at the group's first cell in
+               reading order: the LEFTMOST cell of a horizontal group,
+               the TOPMOST of a vertical group. The created piece is
+               NOT cleared and awards nothing; the other 3 tiles clear
+               as an ordinary (passive-eligible) group clear. If the
+               group already contains an existing special, no new
+               special is created. PERSISTENCE: any existing special
+               caught in ANY matched group is kept on the board — it
+               is not cleared and does not activate; the group's other
+               tiles clear normally and the group still counts for
+               passives (the group counters below read the pre-clear
+               type grid, unchanged). */
+            var stepTypes1K = gridTypes();
+            var keepKeys = {};
+            findMatchComponents(stepTypes1K).forEach(function (comp) {
+              var qualifies = comp.cells.length === 4 && comp.runs.length === 1 && comp.runs[0].cells.length === 4;
+              if (!qualifies) return;
+              var hasSpecial = comp.cells.some(function (k2) {
+                var pp = k2.split(",");
+                var piece2 = grid[Number(pp[0])][Number(pp[1])];
+                return piece2 && piece2.special;
+              });
+              if (hasSpecial) return;
+              /* Reading order: coordinates are single digits, so a
+                 plain string sort of "r,c" keys IS reading order. */
+              var runCells = comp.runs[0].cells.slice().sort();
+              var chosenKey = runCells[0];
+              if (pendingDest && comp.cellSet[pendingDest.r + "," + pendingDest.c]) {
+                chosenKey = pendingDest.r + "," + pendingDest.c;
+              }
+              var cp = chosenKey.split(",");
+              var chosenPiece = grid[Number(cp[0])][Number(cp[1])];
+              if (!chosenPiece) return;
+              var first = runCells[0].split(","), second = runCells[1].split(",");
+              var orient = (first[0] === second[0]) ? "row" : "col";
+              setPieceSpecial(chosenPiece, orient);
+              keepKeys[chosenKey] = true;
+              chosenPiece.el.classList.add("special-born");
+              (function (el) { setTimeout(function () { el.classList.remove("special-born"); }, fastResolve ? 0 : 700); })(chosenPiece.el);
+              if (totals) {
+                totals.specialsCreated = totals.specialsCreated || [];
+                totals.specialsCreated.push({ r: chosenPiece.r, c: chosenPiece.c, type: chosenPiece.type, special: orient, id: chosenPiece.id });
+              }
+            });
+            pendingDest = null;
+            allMatched.forEach(function (p) { if (p.special) keepKeys[p.r + "," + p.c] = true; });
+            var matched = allMatched.filter(function (p) { return !keepKeys[p.r + "," + p.c]; });
+            if (!matched.length) break; /* every matched piece is a persistent special: nothing clears, and looping would never end */
             /* 1F.1: count this step's distinct Shield groups from the
                match-resolution data BEFORE clearing — runs on the live
                type grid, merged where they share a tile. A group formed
@@ -2931,52 +3315,21 @@
               grid[p.r][p.c] = null;
               p.el.remove();
             });
-            /* Gravity + refill together, all at once — no stagger, no
-               forced reflows, and the stage ends on animation.finished
-               instead of a guessed duration + 40ms of dead time.
-               1E.2: falls run scaled by distance (fallDuration —
-               272–400ms desktop, 354–500ms mobile) on an accelerating
-               curve whose slight overshoot gives a subtle landing
-               settle — slow enough to follow individual pieces, with
-               no teleporting or abrupt replacement. */
-            measure();
-            var moves = [];
-            for (var c = 0; c < COLS; c++) {
-              var write = ROWS - 1, r, piece;
-              for (r = ROWS - 1; r >= 0; r--) {
-                piece = grid[r][c];
-                if (!piece) continue;
-                if (piece.r !== write) {
-                  var fromY = piece.r * stepPx, fromX = piece.c * stepPx;
-                  var distRows = write - piece.r;
-                  grid[piece.r][c] = null;
-                  piece.r = write;
-                  grid[write][c] = piece;
-                  var fallMs = fallDuration(distRows);
-                  moves.push(moveAnim(piece, fromX, fromY, fallMs, "cubic-bezier(.5,.05,.6,1.08)"));
-                }
-                write--;
-              }
-              var empty = write + 1; /* rows 0..write are empty */
-              for (r = write; r >= 0; r--) {
-                var spawnR = r - empty;
-                var np = createPiece(randType(), spawnR, c);
-                boardEl.appendChild(np.el);
-                var sFromX = c * stepPx, sFromY = spawnR * stepPx;
-                np.r = r;
-                grid[r][c] = np;
-                var refillMs = fallDuration(empty);
-                moves.push(moveAnim(np, sFromX, sFromY, refillMs, "cubic-bezier(.5,.05,.6,1.08)"));
-              }
-            }
-            if (moves.length) await Promise.all(moves);
+            /* Gravity + refill together, all at once — the shared
+               stage above (specials ride their piece objects down). */
+            await applyGravityAndRefill();
             /* Next cascade (if any) is detected on the very next frame —
                no idle gap between fall and the following match. */
           }
           if (totals) totals.steps = cascade;
           resolveStats.resolutions++;
-          /* dead board recovery: build a fresh playable arrangement */
-          if (!hasMoveIn(gridTypes())) {
+          /* Dead-board recovery: build a fresh playable arrangement.
+             1K: a board holding a special is never dead — the special
+             can always be activation-swapped — so recovery is skipped
+             while any special stands, which also guarantees specials
+             survive recovery with type and orientation intact (they
+             are never re-randomized). */
+          if (!hasMoveIn(gridTypes()) && !boardHasSpecial()) {
             resolveStats.deadRecoveries++;
             if (totals) totals.deadRecovery = true;
             await regenerateBoard();
@@ -4089,6 +4442,10 @@
               enemyTypes: Object.keys(ENEMIES),
               encounters: Object.keys(ENCOUNTERS),
               feedback: lastFeedback,
+              /* 1K: the board's live special map and the last turn's
+                 full totals (both ledgers) for verification. */
+              specials: boardSpecials(),
+              lastTotals: lastTurnTotals,
               gameOver: combat.gameOver, overKind: combat.overKind, busy: busy
             };
           },
@@ -4154,6 +4511,51 @@
               if (e.uid === uidOrDefId || e.defId === uidOrDefId) inst = e;
             });
             return inst ? selectTarget(inst.uid) : false;
+          }
+        };
+
+        /* Milestone 1K: dev-only fixture handle for persistent
+           specials — stage a special of a given type + orientation at
+           a cell, read back the board's special map, drive a REAL
+           attemptSwap through the game's own input path, and read the
+           last turn's totals. Unreachable in normal play: nothing in
+           the UI calls it, and specials can only be STAGED from the
+           console, never created in play except by a straight-4
+           match. */
+        window.__dmSpecial = {
+          place: function (r, c, orient, type) {
+            var p = grid[r] && grid[r][c];
+            if (!p || (orient !== "row" && orient !== "col")) return false;
+            if (type && srcMap[type]) setPieceType(p, type);
+            setPieceSpecial(p, orient);
+            return { r: p.r, c: p.c, type: p.type, special: p.special, id: p.id };
+          },
+          clear: function (r, c) {
+            var p = grid[r] && grid[r][c];
+            if (!p) return false;
+            setPieceSpecial(p, null);
+            return true;
+          },
+          get: function (r, c) {
+            var p = grid[r] && grid[r][c];
+            return p ? { r: p.r, c: p.c, type: p.type, special: p.special, id: p.id } : null;
+          },
+          map: function () { return boardSpecials(); },
+          /* The game's own swap path (drag/tap call this same
+             function): returns its promise. */
+          swap: function (a, b) { return attemptSwap(a, b); },
+          lastTotals: function () { return lastTurnTotals; },
+          /* Direct staged resolution with an explicit swap
+             destination (or null), through the real resolveBoard +
+             runCombatTurn, for creation/placement fixtures. */
+          resolveStaged: function (swapDest) {
+            var totals = { sword: 0, shield: 0, heart: 0, soul: 0, gold: 0, shieldGroups: 0, soulGroups: 0, heartGroups: 0, swordGroups: 0, goldGroups: 0 };
+            return resolveBoard(totals, swapDest || null).then(function () {
+              lastTurnTotals = totals;
+              return runCombatTurn(totals);
+            }).then(function () {
+              return { totals: totals, feedback: lastFeedback, state: window.__dmCombat.getState() };
+            });
           }
         };
 
