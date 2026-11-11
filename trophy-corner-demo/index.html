@@ -535,6 +535,12 @@
          logo as a fraction of the zone. The logo is always clamped fully
          inside the zone, and the zone ends above the engraving text. */
       var logoScale = 1, logoCX = 0.5, logoCY = 0.5, logoTouched = false, lastLogoSrc = null;
+      /* The engraving text is paired with the logo: once the logo is laid
+         out, pairGeom holds its rendered center-x and bottom edge as
+         percentages of the preview, and positionText() locks the words to
+         that center line, TEXT_GAP percent below the logo's bottom edge —
+         so the pair sits (and drags/resizes) as one design. */
+      var pairGeom = null, TEXT_GAP = 3.5;
       function resetLogoPlace(){
         logoScale = 1; logoCX = 0.5; logoCY = 0.5; logoTouched = false;
         logoSizeEl.value = 100;
@@ -552,6 +558,25 @@
         pvLogo.style.width = w + "px";
         pvLogo.style.left = cx + "px";
         pvLogo.style.top = cy + "px";
+        var pw = preview.clientWidth, ph = preview.clientHeight;
+        if (pw && ph){
+          pairGeom = {
+            cx: (pvZone.offsetLeft + cx) / pw * 100,
+            bottom: (pvZone.offsetTop + cy + h / 2) / ph * 100
+          };
+        }
+        positionText();
+      }
+      function positionText(){
+        if (!current) return;
+        var t = current.pv.text;
+        if (current.pv.zone && pvLogo.style.display !== "none" && pairGeom){
+          pvText.style.left = pairGeom.cx + "%";
+          pvText.style.top = (pairGeom.bottom + TEXT_GAP) + "%";
+        } else {
+          pvText.style.left = (t.left || 50) + "%";
+          pvText.style.top = t.top + "%";
+        }
       }
 
       function syncSizeUI(){
@@ -577,6 +602,7 @@
       }
       function updatePreview(){
         if (!current) return;
+        pairGeom = null;
         syncSizeUI();
         var choice = logoChoice();
         var showLogo = current.pv.zone && choice !== "none";
@@ -612,15 +638,14 @@
           logoAdjust.style.display = "none";
         }
         var lines = lineEls.map(function(i){ return i.value.trim(); }).filter(Boolean);
-        pvText.style.top = current.pv.text.top + "%";
         pvText.style.width = (current.pv.text.width || 78) + "%";
-        pvText.style.left = (current.pv.text.left || 50) + "%";
         pvText.style.color = current.pv.text.color;
         pvText.style.fontSize = "clamp(.72rem, 2.6vw, 1.02rem)";
         pvText.innerHTML = lines.map(function(l, i){
           return '<div class="' + (i === 0 ? "l1" : "") + '" style="' + (i === 0 ? "font-size:1.18em" : "font-size:.92em") + '">' +
             l.replace(/&/g,"&amp;").replace(/</g,"&lt;") + "</div>";
         }).join("");
+        positionText();
         var unit = unitPrice();
         document.getElementById("qtyVal").textContent = qty;
         document.getElementById("sumTotal").textContent = money(unit * qty);
