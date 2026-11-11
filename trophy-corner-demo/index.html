@@ -18,7 +18,8 @@
         color-scheme: light;
       }
       *{box-sizing:border-box}
-      html{scroll-behavior:smooth}
+      html{scroll-behavior:smooth;scroll-padding-top:132px}
+      @media (max-width:560px){ html{scroll-padding-top:110px} }
       body{margin:0;background:var(--bg);color:var(--ink);font-family:"Libre Franklin",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.5}
       h1,h2,h3,.serif{font-family:"Playfair Display",Georgia,"Times New Roman",serif}
       button,[role="button"],select,summary,input:not([type="checkbox"],[type="radio"]){min-height:2.25rem}
@@ -163,6 +164,18 @@
       .qtyrow{display:flex;align-items:center;gap:12px}
       .qtybtn{width:46px;height:46px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font-size:1.25rem;font-weight:700}
       .qtyval{font-size:1.15rem;font-weight:700;min-width:2ch;text-align:center}
+      /* Cart quantity steppers */
+      .cqrow{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+      .cq-label{font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+      .cq-controls{display:inline-flex;align-items:center;gap:6px}
+      .cqbtn{width:36px;height:36px;min-height:36px;border-radius:9px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);font-size:1.1rem;font-weight:700;line-height:1;display:grid;place-items:center;padding:0}
+      .cqbtn:hover{border-color:var(--gold);color:var(--gold)}
+      .cqbtn:disabled{opacity:.38;cursor:not-allowed}
+      .cqbtn:disabled:hover{border-color:var(--line);color:var(--ink)}
+      .cqinput{width:58px !important;text-align:center;font-weight:700;padding:7px 6px !important;margin-bottom:0 !important;min-height:36px;height:36px;-moz-appearance:textfield;appearance:textfield}
+      .cqinput::-webkit-outer-spin-button,.cqinput::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+      .cq-each{font-size:.85rem;color:var(--muted)}
+      .cq-tier{font-size:.78rem;color:var(--gold);font-weight:700;width:100%}
       .tiernote{font-size:.83rem;color:var(--muted);margin-top:6px}
       .buysummary{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
       .buysummary .tot{font-size:1.3rem;font-weight:800;margin-right:auto}
@@ -839,6 +852,42 @@
         clearTimeout(toastTimer);
         toastTimer = setTimeout(function(){ toast.classList.remove("show"); }, 2600);
       }
+      /* Recompute a cart line's unit price for a given quantity.
+         For tiered products (the Logo Mug) this reapplies the same
+         bulk tiers used in the product panel — it never just reuses
+         the stored unit price. */
+      function unitForQty(prod, sizeIdx, q){
+        if (!prod) return null;
+        var idx = (typeof sizeIdx === "number" && prod.sizes[sizeIdx]) ? sizeIdx : 0;
+        var base = prod.sizes[idx].price;
+        if (prod.tiers){
+          var best = base;
+          prod.tiers.forEach(function(t){ if (q >= t.min) best = Math.min(best, t.price); });
+          return best;
+        }
+        return base;
+      }
+      function cartUnitFor(it, q){
+        var prod = PRODUCTS.filter(function(p){ return p.id === it.pid; })[0];
+        if (!prod) return it.unit;
+        var idx = it.sizeIdx;
+        if (typeof idx !== "number"){
+          idx = 0;
+          prod.sizes.forEach(function(s, i){ if (s.label === it.size) idx = i; });
+        }
+        var u = unitForQty(prod, idx, q);
+        return u === null ? it.unit : u;
+      }
+      function setCartQty(idx, newQty){
+        var it = cart[idx];
+        if (!it) return;
+        var q = parseInt(newQty, 10);
+        if (isNaN(q)) q = 1;
+        q = Math.max(1, Math.min(9999, q));
+        it.qty = q;
+        it.unit = cartUnitFor(it, q);
+        renderCart();
+      }
       document.getElementById("addToCart").addEventListener("click", function(){
         var choice = logoChoice();
         var logoLabel = !current.pv.zone || choice === "none" ? "No logo" :
@@ -848,7 +897,7 @@
         var lines = lineEls.map(function(i){ return i.value.trim(); }).filter(Boolean);
         cart.push({
           pid: current.id, name: current.name, img: current.img,
-          size: current.sizes[curSize].label, unit: unitPrice(), qty: qty,
+          size: current.sizes[curSize].label, sizeIdx: curSize, unit: unitPrice(), qty: qty,
           logo: logoLabel, lines: lines, needBy: document.getElementById("needBy").value
         });
         closeSheet(); renderCart();
@@ -867,13 +916,32 @@
             var meta = [it.size, it.logo];
             if (it.lines.length) meta.push("Engraving:\n" + it.lines.join("\n"));
             if (it.needBy) meta.push("Need by: " + it.needBy);
+            var prod = PRODUCTS.filter(function(p){ return p.id === it.pid; })[0];
+            var tierMsg = "";
+            if (prod && prod.tiers){
+              if (it.qty >= 576) tierMsg = "Bulk price applied — 576+ tier";
+              else if (it.qty >= 36) tierMsg = "Bulk price applied — 36+ tier";
+              else tierMsg = "Buy 36+ for the bulk price";
+            }
             var d = document.createElement("div");
             d.className = "citem";
             d.innerHTML = '<img src="' + it.img + '" alt="" /><div class="ci"><h4>' + it.name + '</h4>' +
               '<div class="meta">' + meta.join("\n").replace(/&/g,"&amp;").replace(/</g,"&lt;") + '</div>' +
-              '<div class="row"><span>Qty ' + it.qty + " × " + money(it.unit) + '</span><span class="amt">' + money(it.unit * it.qty) + '</span></div>' +
+              '<div class="cqrow"><span class="cq-label" id="cq-label-' + idx + '">Qty</span>' +
+              '<span class="cq-controls">' +
+              '<button class="cqbtn cq-minus" type="button" aria-label="One fewer ' + it.name.replace(/"/g,"&quot;") + '"' + (it.qty <= 1 ? " disabled" : "") + '>−</button>' +
+              '<input class="cqinput" type="number" inputmode="numeric" min="1" max="9999" step="1" value="' + it.qty + '" aria-labelledby="cq-label-' + idx + '" aria-label="Quantity for ' + it.name.replace(/"/g,"&quot;") + '" />' +
+              '<button class="cqbtn cq-plus" type="button" aria-label="One more ' + it.name.replace(/"/g,"&quot;") + '">+</button>' +
+              '</span><span class="cq-each">× ' + money(it.unit) + ' each</span></div>' +
+              (tierMsg ? '<div class="cq-tier">' + tierMsg + '</div>' : '') +
+              '<div class="row"><span style="font-size:.88rem;color:var(--muted)">Line total</span><span class="amt">' + money(it.unit * it.qty) + '</span></div>' +
               '<button class="rmbtn" type="button">Remove</button></div>';
             d.querySelector(".rmbtn").addEventListener("click", function(){ cart.splice(idx, 1); renderCart(); });
+            d.querySelector(".cq-minus").addEventListener("click", function(){ setCartQty(idx, it.qty - 1); });
+            d.querySelector(".cq-plus").addEventListener("click", function(){ setCartQty(idx, it.qty + 1); });
+            var cqInp = d.querySelector(".cqinput");
+            cqInp.addEventListener("change", function(){ setCartQty(idx, cqInp.value); });
+            cqInp.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); setCartQty(idx, cqInp.value); cqInp.blur(); } });
             body.appendChild(d);
           });
         }
